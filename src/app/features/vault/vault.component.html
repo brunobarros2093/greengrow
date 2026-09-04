@@ -1,0 +1,70 @@
+<h1>Cofre Legal</h1>
+<p class="breadcrumb">Armazenamento local e seguro de Habeas Corpus, laudos médicos, receitas e autorizações.</p>
+
+<mat-expansion-panel [expanded]="true" class="form-panel">
+  <mat-expansion-panel-header>
+    <mat-panel-title>Adicionar Documento</mat-panel-title>
+  </mat-expansion-panel-header>
+
+  <form [formGroup]="form" (ngSubmit)="upload()" class="grid-form">
+    <mat-form-field appearance="outline">
+      <mat-label>Título (opcional)</mat-label>
+      <input matInput formControlName="title" placeholder="Usa o nome do arquivo se vazio" />
+    </mat-form-field>
+
+    <mat-form-field appearance="outline">
+      <mat-label>Categoria</mat-label>
+      <mat-select formControlName="category">
+        @for (c of categories; track c.value) {
+          <mat-option [value]="c.value">{{ c.label }}</mat-option>
+        }
+      </mat-select>
+    </mat-form-field>
+
+    <mat-form-field appearance="outline" class="full-width">
+      <mat-label>Anotações</mat-label>
+      <input matInput formControlName="notes" />
+    </mat-form-field>
+
+    <div class="form-actions">
+      <button mat-flat-button color="primary" type="submit" [disabled]="form.invalid || busy">
+        <mat-icon>upload_file</mat-icon>
+        Selecionar Arquivo e Adicionar
+      </button>
+    </div>
+  </form>
+</mat-expansion-panel>
+
+<mat-chip-set class="filter-row">
+  <mat-chip [class.selected]="categoryFilter() === null" (click)="categoryFilter.set(null)">Todos</mat-chip>
+  @for (c of categories; track c.value) {
+    <mat-chip [class.selected]="categoryFilter() === c.value" (click)="categoryFilter.set(c.value)">{{ c.label }}</mat-chip>
+  }
+</mat-chip-set>
+
+<div class="card-grid">
+  @for (doc of filteredDocuments; track doc.id) {
+    <mat-card>
+      <mat-card-header>
+        <mat-card-title>{{ doc.title }}</mat-card-title>
+        <mat-card-subtitle>{{ categoryLabel(doc.category) }} · {{ doc.uploaded_at | date: 'dd/MM/yyyy' }}</mat-card-subtitle>
+      </mat-card-header>
+      <mat-card-content>
+        <p>Arquivo: {{ doc.file_name }}</p>
+        @if (doc.notes) {
+          <p>{{ doc.notes }}</p>
+        }
+      </mat-card-content>
+      <mat-card-actions>
+        <button mat-flat-button color="primary" (click)="openFile(doc.id)">
+          <mat-icon>visibility</mat-icon> Acesso Instantâneo
+        </button>
+        <button mat-button color="warn" (click)="remove(doc.id)">
+          <mat-icon>delete</mat-icon> Remover
+        </button>
+      </mat-card-actions>
+    </mat-card>
+  } @empty {
+    <p>Nenhum documento nesta categoria.</p>
+  }
+</div>

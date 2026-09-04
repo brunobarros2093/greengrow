@@ -1,0 +1,191 @@
+// Include theming for Angular Material with `mat.theme()`.
+// This Sass mixin will define CSS variables that are used for styling Angular Material
+// components according to the Material 3 design spec.
+// Learn more about theming and how to use it for your application's
+// custom components at https://material.angular.dev/guide/theming
+@use '@angular/material' as mat;
+
+html {
+  height: 100%;
+  @include mat.theme(
+    (
+      color: (
+        primary: mat.$green-palette,
+        tertiary: mat.$orange-palette,
+      ),
+      typography: Roboto,
+      density: 0,
+    )
+  );
+}
+
+body {
+  // Default the application to a light color theme. This can be changed to
+  // `dark` to enable the dark color theme, or to `light dark` to defer to the
+  // user's system settings.
+  color-scheme: light;
+
+  // Set a default background, font and text colors for the application using
+  // Angular Material's system-level CSS variables. Learn more about these
+  // variables at https://material.angular.dev/guide/system-variables
+  background-color: var(--mat-sys-surface);
+  color: var(--mat-sys-on-surface);
+  font: var(--mat-sys-body-medium);
+
+  // Reset the user agent margin.
+  margin: 0;
+  height: 100%;
+}
+/* You can add global styles to this file, and also import other style files */
+
+.form-panel {
+  margin-bottom: 24px;
+}
+
+.grid-form {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 8px 16px;
+  padding-top: 16px;
+}
+
+.grid-form mat-form-field {
+  width: 100%;
+}
+
+.form-actions {
+  grid-column: 1 / -1;
+  display: flex;
+  gap: 8px;
+}
+
+.card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 16px;
+}
+
+.clickable {
+  cursor: pointer;
+  transition: box-shadow 0.15s ease;
+}
+
+.clickable:hover {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.list-table {
+  width: 100%;
+}
+
+.page-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.breadcrumb {
+  color: var(--mat-sys-on-surface-variant);
+  margin-bottom: 4px;
+}
+
+.tab-body {
+  padding-top: 16px;
+}
+
+.plant-card {
+  margin-bottom: 12px;
+}
+
+.grid-form.compact {
+  padding-top: 8px;
+}
+
+.full-width {
+  grid-column: 1 / -1;
+}
+
+.training-list {
+  list-style: none;
+  padding: 0;
+  margin: 12px 0 0;
+}
+
+.training-list li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 0;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+}
+
+.timeline {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.journal-entry {
+  width: 100%;
+}
+
+.photo-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.photo-item {
+  position: relative;
+  width: 120px;
+}
+
+.photo-item img {
+  width: 120px;
+  height: 120px;
+  object-fit: cover;
+  border-radius: 4px;
+}
+
+.photo-item button {
+  position: absolute;
+  top: -8px;
+  right: -8px;
+  background: white;
+}
+
+.filter-row {
+  margin-bottom: 16px;
+}
+
+.filter-row mat-chip {
+  cursor: pointer;
+}
+
+.filter-row mat-chip.selected {
+  outline: 2px solid var(--mat-sys-primary);
+}
+
+.low-stock {
+  color: #c62828;
+  font-weight: 600;
+}
+
+.mip-row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.mip-info {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+}
+
+.mip-info .done {
+  text-decoration: line-through;
+  opacity: 0.6;
+}

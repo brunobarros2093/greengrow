@@ -1,0 +1,96 @@
+<h1>Assistente de Super Solo</h1>
+<p class="breadcrumb">Monte e balanceie receitas de Super Solo orgânico e chás aerados de húmus.</p>
+
+<mat-expansion-panel [expanded]="true" class="form-panel">
+  <mat-expansion-panel-header>
+    <mat-panel-title>Nova Receita</mat-panel-title>
+  </mat-expansion-panel-header>
+
+  <form [formGroup]="recipeForm" (ngSubmit)="createRecipe()" class="grid-form">
+    <mat-form-field appearance="outline">
+      <mat-label>Nome da receita</mat-label>
+      <input matInput formControlName="name" placeholder="Ex: Super Solo Base v1" />
+    </mat-form-field>
+
+    <mat-form-field appearance="outline">
+      <mat-label>Tipo</mat-label>
+      <mat-select formControlName="type">
+        @for (t of recipeTypes; track t.value) {
+          <mat-option [value]="t.value">{{ t.label }}</mat-option>
+        }
+      </mat-select>
+    </mat-form-field>
+
+    <mat-form-field appearance="outline" class="full-width">
+      <mat-label>Notas</mat-label>
+      <input matInput formControlName="notes" />
+    </mat-form-field>
+
+    <div class="form-actions">
+      <button mat-flat-button color="primary" type="submit" [disabled]="recipeForm.invalid">Criar Receita</button>
+    </div>
+  </form>
+</mat-expansion-panel>
+
+@for (recipe of recipes(); track recipe.id) {
+  <mat-card class="plant-card">
+    <mat-card-header>
+      <mat-card-title>{{ recipe.name }}</mat-card-title>
+      <mat-card-subtitle>{{ typeLabel(recipe.type) }}</mat-card-subtitle>
+    </mat-card-header>
+    <mat-card-actions>
+      <button mat-button (click)="toggleRecipe(recipe)">
+        <mat-icon>{{ expandedRecipeId === recipe.id ? 'expand_less' : 'expand_more' }}</mat-icon>
+        Componentes
+      </button>
+      <button mat-button color="warn" (click)="removeRecipe(recipe.id)">
+        <mat-icon>delete</mat-icon> Remover
+      </button>
+    </mat-card-actions>
+
+    @if (expandedRecipeId === recipe.id) {
+      <mat-card-content>
+        <form [formGroup]="itemForm" (ngSubmit)="addItem(recipe.id)" class="grid-form compact">
+          <mat-form-field appearance="outline">
+            <mat-label>Componente</mat-label>
+            <input matInput formControlName="component_name" placeholder="Ex: Biochar" />
+          </mat-form-field>
+          <mat-form-field appearance="outline">
+            <mat-label>Quantidade</mat-label>
+            <input matInput type="number" formControlName="quantity" />
+          </mat-form-field>
+          <mat-form-field appearance="outline">
+            <mat-label>Unidade</mat-label>
+            <mat-select formControlName="unit">
+              @for (u of units; track u) {
+                <mat-option [value]="u">{{ u }}</mat-option>
+              }
+            </mat-select>
+          </mat-form-field>
+          <mat-form-field appearance="outline">
+            <mat-label>% da mistura</mat-label>
+            <input matInput type="number" formControlName="percentage" />
+          </mat-form-field>
+          <div class="form-actions">
+            <button mat-stroked-button color="primary" type="submit" [disabled]="itemForm.invalid">Adicionar Componente</button>
+          </div>
+        </form>
+
+        <ul class="training-list">
+          @for (item of itemsByRecipe()[recipe.id] ?? []; track item.id) {
+            <li>
+              <strong>{{ item.component_name }}</strong> — {{ item.quantity }} {{ item.unit }}
+              @if (item.percentage != null) { <span> ({{ item.percentage }}%)</span> }
+              <button mat-icon-button (click)="removeItem(recipe.id, item.id)">
+                <mat-icon>close</mat-icon>
+              </button>
+            </li>
+          }
+        </ul>
+        <p><strong>Total balanceado:</strong> {{ totalPercentage(recipe.id) }}%</p>
+      </mat-card-content>
+    }
+  </mat-card>
+} @empty {
+  <p>Nenhuma receita cadastrada ainda.</p>
+}

@@ -1,0 +1,202 @@
+@if (cycle(); as c) {
+  <p class="breadcrumb">
+    <a [routerLink]="['/grows']">Grows</a> /
+    <a [routerLink]="['/grows', growId]">Grow</a> / {{ c.name }}
+  </p>
+  <div class="page-header">
+    <h1>{{ c.name }}</h1>
+    <mat-chip-set>
+      <mat-chip>{{ stageLabel(c.stage) }}</mat-chip>
+      <mat-chip>Início: {{ c.start_date }}</mat-chip>
+      @if (c.photoperiod) {
+        <mat-chip>{{ c.photoperiod }}</mat-chip>
+      }
+    </mat-chip-set>
+  </div>
+
+  <mat-tab-group>
+    <mat-tab label="Plantas">
+      <div class="tab-body">
+        <mat-expansion-panel [expanded]="true" class="form-panel">
+          <mat-expansion-panel-header>
+            <mat-panel-title>Nova Planta</mat-panel-title>
+          </mat-expansion-panel-header>
+          <form [formGroup]="plantForm" (ngSubmit)="addPlant()" class="grid-form">
+            <mat-form-field appearance="outline">
+              <mat-label>Tag / Identificador</mat-label>
+              <input matInput formControlName="tag" placeholder="Ex: P01" />
+            </mat-form-field>
+            <mat-form-field appearance="outline">
+              <mat-label>Strain</mat-label>
+              <input matInput formControlName="strain" />
+            </mat-form-field>
+            <mat-form-field appearance="outline">
+              <mat-label>Tipo de semente</mat-label>
+              <mat-select formControlName="seed_type">
+                @for (s of seedTypes; track s.value) {
+                  <mat-option [value]="s.value">{{ s.label }}</mat-option>
+                }
+              </mat-select>
+            </mat-form-field>
+            <mat-form-field appearance="outline">
+              <mat-label>Litragem do vaso (L)</mat-label>
+              <input matInput type="number" formControlName="pot_liters" />
+            </mat-form-field>
+            <mat-form-field appearance="outline">
+              <mat-label>Substrato</mat-label>
+              <input matInput formControlName="substrate" />
+            </mat-form-field>
+            <div class="form-actions">
+              <button mat-flat-button color="primary" type="submit" [disabled]="plantForm.invalid">Adicionar Planta</button>
+            </div>
+          </form>
+        </mat-expansion-panel>
+
+        @for (plant of plants(); track plant.id) {
+          <mat-card class="plant-card">
+            <mat-card-header>
+              <mat-card-title>{{ plant.tag }} — {{ plant.strain || 'Sem strain' }}</mat-card-title>
+              <mat-card-subtitle>
+                {{ seedTypeLabel(plant.seed_type) }} · {{ plant.pot_liters ?? '—' }}L · {{ plant.substrate || '—' }}
+              </mat-card-subtitle>
+            </mat-card-header>
+            <mat-card-actions>
+              <button mat-button (click)="togglePlant(plant)">
+                <mat-icon>{{ expandedPlantId === plant.id ? 'expand_less' : 'expand_more' }}</mat-icon>
+                Treinamentos
+              </button>
+              <button mat-button color="warn" (click)="removePlant(plant.id)">
+                <mat-icon>delete</mat-icon> Remover
+              </button>
+            </mat-card-actions>
+
+            @if (expandedPlantId === plant.id) {
+              <mat-card-content>
+                <mat-divider />
+                <h4>Histórico de Treinamentos</h4>
+                <form [formGroup]="trainingForm" (ngSubmit)="addTraining(plant.id)" class="grid-form compact">
+                  <mat-form-field appearance="outline">
+                    <mat-label>Técnica</mat-label>
+                    <mat-select formControlName="technique">
+                      @for (t of trainingTechniques; track t.value) {
+                        <mat-option [value]="t.value">{{ t.label }}</mat-option>
+                      }
+                    </mat-select>
+                  </mat-form-field>
+                  <mat-form-field appearance="outline">
+                    <mat-label>Data</mat-label>
+                    <input matInput type="date" formControlName="applied_at" />
+                  </mat-form-field>
+                  <mat-form-field appearance="outline">
+                    <mat-label>Notas</mat-label>
+                    <input matInput formControlName="notes" />
+                  </mat-form-field>
+                  <div class="form-actions">
+                    <button mat-stroked-button color="primary" type="submit" [disabled]="trainingForm.invalid">Registrar</button>
+                  </div>
+                </form>
+
+                <ul class="training-list">
+                  @for (tr of trainingsByPlant()[plant.id] ?? []; track tr.id) {
+                    <li>
+                      <strong>{{ trainingLabel(tr.technique) }}</strong> — {{ tr.applied_at }}
+                      @if (tr.notes) { <span> · {{ tr.notes }}</span> }
+                      <button mat-icon-button (click)="removeTraining(plant.id, tr.id)">
+                        <mat-icon>close</mat-icon>
+                      </button>
+                    </li>
+                  }
+                </ul>
+              </mat-card-content>
+            }
+          </mat-card>
+        } @empty {
+          <p>Nenhuma planta cadastrada neste ciclo.</p>
+        }
+      </div>
+    </mat-tab>
+
+    <mat-tab label="Diário de Bordo">
+      <div class="tab-body">
+        <mat-expansion-panel [expanded]="true" class="form-panel">
+          <mat-expansion-panel-header>
+            <mat-panel-title>Novo Registro</mat-panel-title>
+          </mat-expansion-panel-header>
+          <form [formGroup]="journalForm" (ngSubmit)="addJournalEntry()" class="grid-form">
+            <mat-form-field appearance="outline">
+              <mat-label>Data</mat-label>
+              <input matInput type="date" formControlName="entry_date" />
+            </mat-form-field>
+            <mat-form-field appearance="outline">
+              <mat-label>Tipo</mat-label>
+              <mat-select formControlName="entry_type">
+                @for (t of journalTypes; track t.value) {
+                  <mat-option [value]="t.value">{{ t.label }}</mat-option>
+                }
+              </mat-select>
+            </mat-form-field>
+            <mat-form-field appearance="outline">
+              <mat-label>Planta (opcional)</mat-label>
+              <mat-select formControlName="plant_id">
+                <mat-option [value]="null">Ciclo inteiro</mat-option>
+                @for (p of plants(); track p.id) {
+                  <mat-option [value]="p.id">{{ p.tag }}</mat-option>
+                }
+              </mat-select>
+            </mat-form-field>
+            <mat-form-field appearance="outline">
+              <mat-label>Título</mat-label>
+              <input matInput formControlName="title" />
+            </mat-form-field>
+            <mat-form-field appearance="outline" class="full-width">
+              <mat-label>Anotações</mat-label>
+              <textarea matInput formControlName="content" rows="3"></textarea>
+            </mat-form-field>
+            <div class="form-actions">
+              <button mat-flat-button color="primary" type="submit" [disabled]="journalForm.invalid">Adicionar Registro</button>
+            </div>
+          </form>
+        </mat-expansion-panel>
+
+        <div class="timeline">
+          @for (entry of journalEntries(); track entry.id) {
+            <mat-card class="journal-entry">
+              <mat-card-header>
+                <mat-card-title>{{ entry.title || journalTypeLabel(entry.entry_type) }}</mat-card-title>
+                <mat-card-subtitle>{{ entry.entry_date }} · {{ journalTypeLabel(entry.entry_type) }}</mat-card-subtitle>
+              </mat-card-header>
+              <mat-card-content>
+                <p>{{ entry.content }}</p>
+                @if (photosByEntry()[entry.id]; as photos) {
+                  <div class="photo-grid">
+                    @for (photo of photos; track photo.id) {
+                      <div class="photo-item">
+                        <img [src]="photo.dataUrl" alt="Foto do diário" />
+                        <button mat-icon-button (click)="removePhoto(entry.id, photo.id)">
+                          <mat-icon>close</mat-icon>
+                        </button>
+                      </div>
+                    }
+                  </div>
+                }
+              </mat-card-content>
+              <mat-card-actions>
+                <button mat-button (click)="loadPhotos(entry.id)">
+                  <mat-icon>photo_library</mat-icon> Ver Fotos
+                </button>
+                <button mat-button (click)="addPhoto(entry.id)">
+                  <mat-icon>add_photo_alternate</mat-icon> Adicionar Foto
+                </button>
+                <button mat-button color="warn" (click)="removeJournalEntry(entry.id)">
+                  <mat-icon>delete</mat-icon> Remover
+                </button>
+              </mat-card-actions>
+            </mat-card>
+          } @empty {
+            <p>Nenhum registro no diário ainda.</p>
+          }
+        </div>
+      </div>
+    </mat-tab>
+  </mat-tab-group>
+}
