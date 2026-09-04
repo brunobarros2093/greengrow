@@ -30,5 +30,9 @@ export const routes: Routes = [
     path: 'mip',
     loadComponent: () => import('./features/mip/mip.component').then((m) => m.MipComponent),
   },
+  {
+    path: 'settings',
+    loadComponent: () => import('./features/settings/settings.component').then((m) => m.SettingsComponent),
+  },
   { path: '**', redirectTo: 'grows' },
 ];

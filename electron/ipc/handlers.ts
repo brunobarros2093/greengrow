@@ -1,8 +1,8 @@
-import { ipcMain, dialog, shell, BrowserWindow } from 'electron';
+import { app, ipcMain, dialog, shell, BrowserWindow } from 'electron';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { randomUUID } from 'node:crypto';
-import { getVaultDir, getJournalPhotosDir } from '../db/database';
+import { getVaultDir, getJournalPhotosDir, getDbPath, closeDb, getDb } from '../db/database';
 import {
   GrowsRepo,
   CyclesRepo,
@@ -12,6 +12,7 @@ import {
   SuperSoloRepo,
   MipRepo,
   JournalRepo,
+  WateringsRepo,
 } from '../db/repositories';
 
 function handle(channel: string, fn: (...args: any[]) => any) {
@@ -140,5 +141,44 @@ export function registerIpcHandlers(): void {
     const buf = fs.readFileSync(storedPath);
     const ext = path.extname(storedPath).replace('.', '') || 'png';
     return `data:image/${ext};base64,${buf.toString('base64')}`;
+  });
+
+  // Waterings / Fertirrigação
+  handle('waterings:listByPlant', (plantId: string) => WateringsRepo.listByPlant(plantId));
+  handle('waterings:listByCycle', (cycleId: string) => WateringsRepo.listByCycle(cycleId));
+  handle('waterings:lastByPlantIds', (plantIds: string[]) => WateringsRepo.lastByPlantIds(plantIds));
+  handle('waterings:create', (input: any) => WateringsRepo.create(input));
+  handle('waterings:createBulk', (plantIds: string[], shared: any) => WateringsRepo.createBulk(plantIds, shared));
+  handle('waterings:remove', (id: string) => WateringsRepo.remove(id));
+
+  // Backup & Restore
+  handle('backup:getPath', () => getDbPath());
+  handle('backup:export', async () => {
+    const win = BrowserWindow.getFocusedWindow();
+    const defaultName = `greengrow-backup-${new Date().toISOString().slice(0, 10)}.db`;
+    const result = await dialog.showSaveDialog(win!, {
+      title: 'Salvar backup do banco de dados',
+      defaultPath: defaultName,
+      filters: [{ name: 'Banco de Dados SQLite', extensions: ['db'] }],
+    });
+    if (result.canceled || !result.filePath) return null;
+    getDb(); // ensure any pending writes are flushed / db initialized
+    fs.copyFileSync(getDbPath(), result.filePath);
+    return result.filePath;
+  });
+  handle('backup:import', async () => {
+    const win = BrowserWindow.getFocusedWindow();
+    const result = await dialog.showOpenDialog(win!, {
+      title: 'Restaurar banco de dados',
+      properties: ['openFile'],
+      filters: [{ name: 'Banco de Dados SQLite', extensions: ['db'] }],
+    });
+    if (result.canceled || result.filePaths.length === 0) return null;
+    const sourcePath = result.filePaths[0];
+    closeDb();
+    fs.copyFileSync(sourcePath, getDbPath());
+    app.relaunch();
+    app.exit(0);
+    return true;
   });
 }

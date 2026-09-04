@@ -118,6 +118,18 @@ CREATE TABLE IF NOT EXISTS journal_photos (
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
+CREATE TABLE IF NOT EXISTS waterings (
+  id TEXT PRIMARY KEY,
+  plant_id TEXT REFERENCES plants(id) ON DELETE CASCADE,
+  cycle_id TEXT REFERENCES cycles(id) ON DELETE CASCADE,
+  date TEXT NOT NULL,
+  type TEXT NOT NULL DEFAULT 'agua_pura', -- agua_pura|fertirrigacao
+  nutrients_used TEXT,
+  volume_ml REAL,
+  notes TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
 CREATE INDEX IF NOT EXISTS idx_cycles_grow ON cycles(grow_id);
 CREATE INDEX IF NOT EXISTS idx_plants_cycle ON plants(cycle_id);
 CREATE INDEX IF NOT EXISTS idx_trainings_plant ON plant_trainings(plant_id);
@@ -125,4 +137,6 @@ CREATE INDEX IF NOT EXISTS idx_recipe_items_recipe ON supersolo_recipe_items(rec
 CREATE INDEX IF NOT EXISTS idx_mip_grow ON mip_calendar_events(grow_id);
 CREATE INDEX IF NOT EXISTS idx_journal_cycle ON journal_entries(cycle_id);
 CREATE INDEX IF NOT EXISTS idx_journal_photos_entry ON journal_photos(journal_entry_id);
+CREATE INDEX IF NOT EXISTS idx_waterings_plant ON waterings(plant_id);
+CREATE INDEX IF NOT EXISTS idx_waterings_cycle ON waterings(cycle_id);
 `;

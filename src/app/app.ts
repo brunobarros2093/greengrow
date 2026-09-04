@@ -18,5 +18,6 @@ export class App {
     { path: '/supersolo', icon: 'science', label: 'Super Solo' },
     { path: '/mip', icon: 'bug_report', label: 'MIP & Saúde' },
     { path: '/vault', icon: 'lock', label: 'Cofre Legal' },
+    { path: '/settings', icon: 'settings', label: 'Configurações' },
   ];
 }

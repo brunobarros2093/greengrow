@@ -330,6 +330,73 @@ export const SuperSoloRepo = {
   },
 };
 
+// ---------- Waterings / Fertirrigação ----------
+export interface Watering {
+  id: string;
+  plant_id: string | null;
+  cycle_id: string | null;
+  date: string;
+  type: string;
+  nutrients_used: string | null;
+  volume_ml: number | null;
+  notes: string | null;
+  created_at: string;
+}
+
+export const WateringsRepo = {
+  listByPlant(plantId: string): Watering[] {
+    return getDb().prepare('SELECT * FROM waterings WHERE plant_id = ? ORDER BY date DESC').all(plantId) as unknown as Watering[];
+  },
+  listByCycle(cycleId: string): Watering[] {
+    return getDb().prepare('SELECT * FROM waterings WHERE cycle_id = ? ORDER BY date DESC').all(cycleId) as unknown as Watering[];
+  },
+  lastByPlantIds(plantIds: string[]): Record<string, Watering | null> {
+    const result: Record<string, Watering | null> = {};
+    const stmt = getDb().prepare('SELECT * FROM waterings WHERE plant_id = ? ORDER BY date DESC LIMIT 1');
+    for (const id of plantIds) {
+      result[id] = (stmt.get(id) as unknown as Watering) ?? null;
+    }
+    return result;
+  },
+  create(input: Omit<Watering, 'id' | 'created_at'>): Watering {
+    const id = randomUUID();
+    const ts = now();
+    getDb()
+      .prepare(
+        `INSERT INTO waterings (id, plant_id, cycle_id, date, type, nutrients_used, volume_ml, notes, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      )
+      .run(id, input.plant_id, input.cycle_id, input.date, input.type, input.nutrients_used, input.volume_ml, input.notes, ts);
+    return getDb().prepare('SELECT * FROM waterings WHERE id = ?').get(id) as unknown as Watering;
+  },
+  createBulk(plantIds: string[], shared: Omit<Watering, 'id' | 'created_at' | 'plant_id'>): Watering[] {
+    const db = getDb();
+    const stmt = db.prepare(
+      `INSERT INTO waterings (id, plant_id, cycle_id, date, type, nutrients_used, volume_ml, notes, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    );
+    const ts = now();
+    const ids: string[] = [];
+    db.exec('BEGIN');
+    try {
+      for (const plantId of plantIds) {
+        const id = randomUUID();
+        ids.push(id);
+        stmt.run(id, plantId, shared.cycle_id, shared.date, shared.type, shared.nutrients_used, shared.volume_ml, shared.notes, ts);
+      }
+      db.exec('COMMIT');
+    } catch (err) {
+      db.exec('ROLLBACK');
+      throw err;
+    }
+    const placeholders = ids.map(() => '?').join(',');
+    return db.prepare(`SELECT * FROM waterings WHERE id IN (${placeholders})`).all(...ids) as unknown as Watering[];
+  },
+  remove(id: string): void {
+    getDb().prepare('DELETE FROM waterings WHERE id = ?').run(id);
+  },
+};
+
 // ---------- MIP Calendar ----------
 export interface MipEvent {
   id: string;

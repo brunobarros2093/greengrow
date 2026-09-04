@@ -52,18 +52,100 @@
           </form>
         </mat-expansion-panel>
 
-        @for (plant of plants(); track plant.id) {
-          <mat-card class="plant-card">
+        <div class="bulk-watering-toolbar">
+          <button mat-stroked-button color="primary" (click)="toggleBulkWateringMode()">
+            <mat-icon>water_drop</mat-icon>
+            {{ bulkWateringMode() ? 'Cancelar Rega em Lote' : 'Regar em Lote' }}
+          </button>
+          @if (bulkWateringMode()) {
+            <button mat-button (click)="toggleSelectAllPlants()">
+              <mat-icon>done_all</mat-icon>
+              {{ selectedPlantIds().size === plants().length && plants().length > 0 ? 'Desmarcar Todas' : 'Selecionar Todas' }}
+            </button>
+            <span class="bulk-selection-count">{{ selectedPlantIds().size }} planta(s) selecionada(s)</span>
+          }
+        </div>
+
+        @if (bulkWateringMode()) {
+          <mat-card class="form-panel bulk-watering-form">
             <mat-card-header>
+              <mat-card-title>Registrar Rega em Lote</mat-card-title>
+              <mat-card-subtitle>Marque as plantas abaixo e preencha os dados — um registro será criado para cada uma.</mat-card-subtitle>
+            </mat-card-header>
+            <mat-card-content>
+              <form [formGroup]="bulkWateringForm" (ngSubmit)="addBulkWatering()" class="grid-form">
+                <mat-form-field appearance="outline">
+                  <mat-label>Data</mat-label>
+                  <input matInput type="date" formControlName="date" />
+                </mat-form-field>
+                <mat-form-field appearance="outline">
+                  <mat-label>Tipo</mat-label>
+                  <mat-select formControlName="type">
+                    @for (t of wateringTypes; track t.value) {
+                      <mat-option [value]="t.value">{{ t.label }}</mat-option>
+                    }
+                  </mat-select>
+                </mat-form-field>
+                <mat-form-field appearance="outline">
+                  <mat-label>Volume (mL)</mat-label>
+                  <input matInput type="number" formControlName="volume_ml" />
+                </mat-form-field>
+                @if (bulkWateringForm.value.type === 'fertirrigacao') {
+                  <mat-form-field appearance="outline">
+                    <mat-label>Insumos aplicados</mat-label>
+                    <input matInput formControlName="nutrients_used" placeholder="Ex: Bokashi + Chá de Húmus" />
+                  </mat-form-field>
+                }
+                <mat-form-field appearance="outline">
+                  <mat-label>Notas</mat-label>
+                  <input matInput formControlName="notes" />
+                </mat-form-field>
+                <div class="form-actions">
+                  <button
+                    mat-flat-button
+                    color="primary"
+                    type="submit"
+                    [disabled]="bulkWateringForm.invalid || selectedPlantIds().size === 0 || bulkBusy"
+                  >
+                    Registrar para {{ selectedPlantIds().size }} planta(s)
+                  </button>
+                </div>
+              </form>
+            </mat-card-content>
+          </mat-card>
+        }
+
+        @for (plant of plants(); track plant.id) {
+          <mat-card class="plant-card" [class.plant-card-selected]="bulkWateringMode() && isPlantSelected(plant.id)">
+            <mat-card-header>
+              @if (bulkWateringMode()) {
+                <mat-checkbox
+                  class="plant-select-checkbox"
+                  [checked]="isPlantSelected(plant.id)"
+                  (change)="togglePlantSelection(plant.id)"
+                ></mat-checkbox>
+              }
               <mat-card-title>{{ plant.tag }} — {{ plant.strain || 'Sem strain' }}</mat-card-title>
               <mat-card-subtitle>
                 {{ seedTypeLabel(plant.seed_type) }} · {{ plant.pot_liters ?? '—' }}L · {{ plant.substrate || '—' }}
               </mat-card-subtitle>
             </mat-card-header>
+            <mat-card-content class="watering-badge-row">
+              <span class="watering-badge" [class]="'status-' + wateringStatus(plant.id)">
+                <mat-icon>water_drop</mat-icon>
+                {{ wateringStatusLabel(plant.id) }}
+              </span>
+              @if (nextFertirrigationDate(plant.id); as nextDate) {
+                <span class="watering-badge status-info">
+                  <mat-icon>event_repeat</mat-icon>
+                  Próxima fertirrigação: {{ nextDate }}
+                </span>
+              }
+            </mat-card-content>
             <mat-card-actions>
               <button mat-button (click)="togglePlant(plant)">
                 <mat-icon>{{ expandedPlantId === plant.id ? 'expand_less' : 'expand_more' }}</mat-icon>
-                Treinamentos
+                Treinamentos &amp; Regas
               </button>
               <button mat-button color="warn" (click)="removePlant(plant.id)">
                 <mat-icon>delete</mat-icon> Remover
@@ -102,6 +184,54 @@
                       <strong>{{ trainingLabel(tr.technique) }}</strong> — {{ tr.applied_at }}
                       @if (tr.notes) { <span> · {{ tr.notes }}</span> }
                       <button mat-icon-button (click)="removeTraining(plant.id, tr.id)">
+                        <mat-icon>close</mat-icon>
+                      </button>
+                    </li>
+                  }
+                </ul>
+
+                <mat-divider />
+                <h4>Regas e Fertirrigação</h4>
+                <form [formGroup]="wateringForm" (ngSubmit)="addWatering(plant.id)" class="grid-form compact">
+                  <mat-form-field appearance="outline">
+                    <mat-label>Data</mat-label>
+                    <input matInput type="date" formControlName="date" />
+                  </mat-form-field>
+                  <mat-form-field appearance="outline">
+                    <mat-label>Tipo</mat-label>
+                    <mat-select formControlName="type">
+                      @for (t of wateringTypes; track t.value) {
+                        <mat-option [value]="t.value">{{ t.label }}</mat-option>
+                      }
+                    </mat-select>
+                  </mat-form-field>
+                  <mat-form-field appearance="outline">
+                    <mat-label>Volume (mL)</mat-label>
+                    <input matInput type="number" formControlName="volume_ml" />
+                  </mat-form-field>
+                  @if (wateringForm.value.type === 'fertirrigacao') {
+                    <mat-form-field appearance="outline">
+                      <mat-label>Insumos aplicados</mat-label>
+                      <input matInput formControlName="nutrients_used" placeholder="Ex: Bokashi + Chá de Húmus" />
+                    </mat-form-field>
+                  }
+                  <mat-form-field appearance="outline">
+                    <mat-label>Notas</mat-label>
+                    <input matInput formControlName="notes" />
+                  </mat-form-field>
+                  <div class="form-actions">
+                    <button mat-stroked-button color="primary" type="submit" [disabled]="wateringForm.invalid">Registrar Rega</button>
+                  </div>
+                </form>
+
+                <ul class="training-list">
+                  @for (w of wateringsByPlant()[plant.id] ?? []; track w.id) {
+                    <li>
+                      <strong>{{ wateringTypeLabel(w.type) }}</strong> — {{ w.date }}
+                      @if (w.volume_ml) { <span> · {{ w.volume_ml }}mL</span> }
+                      @if (w.nutrients_used) { <span> · {{ w.nutrients_used }}</span> }
+                      @if (w.notes) { <span> · {{ w.notes }}</span> }
+                      <button mat-icon-button (click)="removeWatering(plant.id, w.id)">
                         <mat-icon>close</mat-icon>
                       </button>
                     </li>

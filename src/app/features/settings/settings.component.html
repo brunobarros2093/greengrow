@@ -1,0 +1,27 @@
+<h1>Configurações</h1>
+
+<mat-card class="form-panel">
+  <mat-card-header>
+    <mat-card-title>Backup e Restauração do Banco de Dados</mat-card-title>
+    <mat-card-subtitle>Arquivo atual: {{ dbPath() || '—' }}</mat-card-subtitle>
+  </mat-card-header>
+  <mat-card-content>
+    <p>
+      Faça backup periódico do seu banco de dados local para um pen drive ou nuvem pessoal.
+      Todos os seus grows, ciclos, plantas, insumos e documentos do Cofre Legal estão neste único arquivo.
+    </p>
+  </mat-card-content>
+  <mat-card-actions>
+    <button mat-flat-button color="primary" [disabled]="busy" (click)="exportBackup()">
+      <mat-icon>save</mat-icon> Fazer Backup do Banco
+    </button>
+    <button mat-stroked-button color="warn" [disabled]="busy" (click)="importBackup()">
+      <mat-icon>upload</mat-icon> Restaurar Banco de Dados / Upload
+    </button>
+  </mat-card-actions>
+  @if (lastMessage) {
+    <mat-card-content>
+      <p>{{ lastMessage }}</p>
+    </mat-card-content>
+  }
+</mat-card>

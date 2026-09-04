@@ -72,6 +72,19 @@ const api = {
     removePhoto: (id: string) => invoke('journal:removePhoto', id),
     readPhotoAsDataUrl: (storedPath: string) => invoke('journal:readPhotoAsDataUrl', storedPath),
   },
+  waterings: {
+    listByPlant: (plantId: string) => invoke('waterings:listByPlant', plantId),
+    listByCycle: (cycleId: string) => invoke('waterings:listByCycle', cycleId),
+    lastByPlantIds: (plantIds: string[]) => invoke('waterings:lastByPlantIds', plantIds),
+    create: (input: any) => invoke('waterings:create', input),
+    createBulk: (plantIds: string[], shared: any) => invoke('waterings:createBulk', plantIds, shared),
+    remove: (id: string) => invoke('waterings:remove', id),
+  },
+  backup: {
+    getPath: () => invoke('backup:getPath'),
+    export: () => invoke('backup:export'),
+    import: () => invoke('backup:import'),
+  },
 };
 
 contextBridge.exposeInMainWorld('electronAPI', api);

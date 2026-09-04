@@ -171,6 +171,25 @@ export const JOURNAL_ENTRY_TYPES = [
   { value: 'cura', label: 'Cura' },
 ];
 
+export interface Watering {
+  id: string;
+  plant_id: string | null;
+  cycle_id: string | null;
+  date: string;
+  type: string;
+  nutrients_used: string | null;
+  volume_ml: number | null;
+  notes: string | null;
+  created_at: string;
+}
+
+export const WATERING_TYPES = [
+  { value: 'agua_pura', label: 'Água Pura' },
+  { value: 'fertirrigacao', label: 'Fertirrigação' },
+];
+
+export type WateringStatus = 'sem_registro' | 'normal' | 'atencao' | 'critico';
+
 export interface JournalPhoto {
   id: string;
   journal_entry_id: string;

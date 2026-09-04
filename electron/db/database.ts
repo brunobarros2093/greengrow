@@ -22,12 +22,21 @@ export function getJournalPhotosDir(): string {
   return dir;
 }
 
+export function getDbPath(): string {
+  return path.join(getUserDataDir(), 'greengrow.sqlite');
+}
+
 export function getDb(): DatabaseSync {
   if (db) return db;
-  const dataDir = getUserDataDir();
-  fs.mkdirSync(dataDir, { recursive: true });
-  const dbPath = path.join(dataDir, 'greengrow.sqlite');
-  db = new DatabaseSync(dbPath);
+  fs.mkdirSync(getUserDataDir(), { recursive: true });
+  db = new DatabaseSync(getDbPath());
   db.exec(SCHEMA_SQL);
   return db;
+}
+
+export function closeDb(): void {
+  if (db) {
+    db.close();
+    db = null;
+  }
 }
