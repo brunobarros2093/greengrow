@@ -8,6 +8,10 @@ function invoke<T = any>(channel: string, ...args: any[]): Promise<T> {
 }
 
 const api = {
+  settings: {
+    getPotSizes: () => invoke('settings:getPotSizes'),
+    setPotSizes: (sizes: any) => invoke('settings:setPotSizes', sizes),
+  },
   grows: {
     list: () => invoke('grows:list'),
     get: (id: string) => invoke('grows:get', id),
@@ -25,6 +29,7 @@ const api = {
   },
   plants: {
     listByCycle: (cycleId: string) => invoke('plants:listByCycle', cycleId),
+    listAllWithContext: () => invoke('plants:listAllWithContext'),
     get: (id: string) => invoke('plants:get', id),
     create: (input: any) => invoke('plants:create', input),
     update: (id: string, input: any) => invoke('plants:update', id, input),
@@ -32,6 +37,10 @@ const api = {
     listTrainings: (plantId: string) => invoke('plants:listTrainings', plantId),
     addTraining: (input: any) => invoke('plants:addTraining', input),
     removeTraining: (id: string) => invoke('plants:removeTraining', id),
+    listTransplants: (plantId: string) => invoke('plants:listTransplants', plantId),
+    lastTransplantByPlantIds: (plantIds: string[]) => invoke('plants:lastTransplantByPlantIds', plantIds),
+    addTransplant: (input: any) => invoke('plants:addTransplant', input),
+    removeTransplant: (id: string) => invoke('plants:removeTransplant', id),
   },
   vault: {
     list: () => invoke('vault:list'),
@@ -76,6 +85,7 @@ const api = {
     listByPlant: (plantId: string) => invoke('waterings:listByPlant', plantId),
     listByCycle: (cycleId: string) => invoke('waterings:listByCycle', cycleId),
     lastByPlantIds: (plantIds: string[]) => invoke('waterings:lastByPlantIds', plantIds),
+    getLastCycleInputType: (cycleId: string) => invoke('waterings:getLastCycleInputType', cycleId),
     create: (input: any) => invoke('waterings:create', input),
     createBulk: (plantIds: string[], shared: any) => invoke('waterings:createBulk', plantIds, shared),
     remove: (id: string) => invoke('waterings:remove', id),

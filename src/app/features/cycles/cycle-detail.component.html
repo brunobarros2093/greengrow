@@ -46,11 +46,22 @@
               <mat-label>Substrato</mat-label>
               <input matInput formControlName="substrate" />
             </mat-form-field>
+            <mat-form-field appearance="outline">
+              <mat-label>Data de plantio/germinação</mat-label>
+              <input matInput type="date" formControlName="planted_at" />
+            </mat-form-field>
             <div class="form-actions">
               <button mat-flat-button color="primary" type="submit" [disabled]="plantForm.invalid">Adicionar Planta</button>
             </div>
           </form>
         </mat-expansion-panel>
+
+        <div class="feeding-suggestion-banner">
+          <mat-icon>eco</mat-icon>
+          <span>
+            Sugestão de hoje (rodízio de fertirrigação): <strong>{{ feedingInputLabel(suggestedInputType()) }}</strong>
+          </span>
+        </div>
 
         <div class="bulk-watering-toolbar">
           <button mat-stroked-button color="primary" (click)="toggleBulkWateringMode()">
@@ -79,10 +90,12 @@
                   <input matInput type="date" formControlName="date" />
                 </mat-form-field>
                 <mat-form-field appearance="outline">
-                  <mat-label>Tipo</mat-label>
-                  <mat-select formControlName="type">
-                    @for (t of wateringTypes; track t.value) {
-                      <mat-option [value]="t.value">{{ t.label }}</mat-option>
+                  <mat-label>Insumo (rodízio)</mat-label>
+                  <mat-select formControlName="input_type">
+                    @for (t of feedingInputTypes; track t.value) {
+                      <mat-option [value]="t.value">
+                        {{ t.label }}{{ t.value === suggestedInputType() ? ' (sugerido)' : '' }}
+                      </mat-option>
                     }
                   </mat-select>
                 </mat-form-field>
@@ -90,12 +103,10 @@
                   <mat-label>Volume (mL)</mat-label>
                   <input matInput type="number" formControlName="volume_ml" />
                 </mat-form-field>
-                @if (bulkWateringForm.value.type === 'fertirrigacao') {
-                  <mat-form-field appearance="outline">
-                    <mat-label>Insumos aplicados</mat-label>
-                    <input matInput formControlName="nutrients_used" placeholder="Ex: Bokashi + Chá de Húmus" />
-                  </mat-form-field>
-                }
+                <mat-form-field appearance="outline">
+                  <mat-label>Diluição / detalhes (opcional)</mat-label>
+                  <input matInput formControlName="nutrients_used" placeholder="Ex: 5mL/L" />
+                </mat-form-field>
                 <mat-form-field appearance="outline">
                   <mat-label>Notas</mat-label>
                   <input matInput formControlName="notes" />
@@ -131,21 +142,29 @@
               </mat-card-subtitle>
             </mat-card-header>
             <mat-card-content class="watering-badge-row">
+              <span class="watering-badge status-age">
+                <mat-icon>cake</mat-icon>
+                {{ plantAgeLabel(plant) }}
+              </span>
               <span class="watering-badge" [class]="'status-' + wateringStatus(plant.id)">
                 <mat-icon>water_drop</mat-icon>
                 {{ wateringStatusLabel(plant.id) }}
               </span>
-              @if (nextFertirrigationDate(plant.id); as nextDate) {
+              @if (lastWateringByPlant()[plant.id]?.input_type; as lastInput) {
                 <span class="watering-badge status-info">
-                  <mat-icon>event_repeat</mat-icon>
-                  Próxima fertirrigação: {{ nextDate }}
+                  <mat-icon>history</mat-icon>
+                  Última: {{ feedingInputLabel(lastInput) }}
                 </span>
               }
+              <span class="watering-badge" [class.status-critico]="transplantSuggestionOverdue(plant)" [class.status-transplant]="!transplantSuggestionOverdue(plant)">
+                <mat-icon>yard</mat-icon>
+                {{ transplantSuggestionLabel(plant) }}
+              </span>
             </mat-card-content>
             <mat-card-actions>
               <button mat-button (click)="togglePlant(plant)">
                 <mat-icon>{{ expandedPlantId === plant.id ? 'expand_less' : 'expand_more' }}</mat-icon>
-                Treinamentos &amp; Regas
+                Treinamentos, Regas &amp; Transplantes
               </button>
               <button mat-button color="warn" (click)="removePlant(plant.id)">
                 <mat-icon>delete</mat-icon> Remover
@@ -198,10 +217,12 @@
                     <input matInput type="date" formControlName="date" />
                   </mat-form-field>
                   <mat-form-field appearance="outline">
-                    <mat-label>Tipo</mat-label>
-                    <mat-select formControlName="type">
-                      @for (t of wateringTypes; track t.value) {
-                        <mat-option [value]="t.value">{{ t.label }}</mat-option>
+                    <mat-label>Insumo (rodízio)</mat-label>
+                    <mat-select formControlName="input_type">
+                      @for (t of feedingInputTypes; track t.value) {
+                        <mat-option [value]="t.value">
+                          {{ t.label }}{{ t.value === suggestedInputType() ? ' (sugerido)' : '' }}
+                        </mat-option>
                       }
                     </mat-select>
                   </mat-form-field>
@@ -209,12 +230,10 @@
                     <mat-label>Volume (mL)</mat-label>
                     <input matInput type="number" formControlName="volume_ml" />
                   </mat-form-field>
-                  @if (wateringForm.value.type === 'fertirrigacao') {
-                    <mat-form-field appearance="outline">
-                      <mat-label>Insumos aplicados</mat-label>
-                      <input matInput formControlName="nutrients_used" placeholder="Ex: Bokashi + Chá de Húmus" />
-                    </mat-form-field>
-                  }
+                  <mat-form-field appearance="outline">
+                    <mat-label>Diluição / detalhes (opcional)</mat-label>
+                    <input matInput formControlName="nutrients_used" placeholder="Ex: 5mL/L" />
+                  </mat-form-field>
                   <mat-form-field appearance="outline">
                     <mat-label>Notas</mat-label>
                     <input matInput formControlName="notes" />
@@ -227,11 +246,67 @@
                 <ul class="training-list">
                   @for (w of wateringsByPlant()[plant.id] ?? []; track w.id) {
                     <li>
-                      <strong>{{ wateringTypeLabel(w.type) }}</strong> — {{ w.date }}
+                      <strong>{{ feedingInputLabel(w.input_type) }}</strong> — {{ w.date }}
                       @if (w.volume_ml) { <span> · {{ w.volume_ml }}mL</span> }
                       @if (w.nutrients_used) { <span> · {{ w.nutrients_used }}</span> }
                       @if (w.notes) { <span> · {{ w.notes }}</span> }
                       <button mat-icon-button (click)="removeWatering(plant.id, w.id)">
+                        <mat-icon>close</mat-icon>
+                      </button>
+                    </li>
+                  }
+                </ul>
+
+                <mat-divider />
+                <h4>Transplantes</h4>
+                <div class="final-pot-toggle">
+                  <mat-slide-toggle [checked]="plant.is_final_pot === 1" (change)="toggleFinalPot(plant)">
+                    Vaso Final (a planta ficará neste vaso — não sugerir mais transplantes)
+                  </mat-slide-toggle>
+                </div>
+                @if (plant.is_final_pot !== 1) {
+                  <p class="transplant-hint" [class.overdue]="transplantSuggestionOverdue(plant)">
+                    <mat-icon>yard</mat-icon>
+                    {{ transplantSuggestionLabel(plant) }}
+                    <span class="transplant-hint-note">(estimativa — o que vale é o tamanho real da raiz/planta)</span>
+                  </p>
+                }
+                <form [formGroup]="transplantForm" (ngSubmit)="addTransplant(plant.id)" class="grid-form compact">
+                  <mat-form-field appearance="outline">
+                    <mat-label>Data</mat-label>
+                    <input matInput type="date" formControlName="date" />
+                  </mat-form-field>
+                  <mat-form-field appearance="outline">
+                    <mat-label>Etapa (opcional)</mat-label>
+                    <mat-select (selectionChange)="onTransplantStagePick($event.value)">
+                      @for (s of transplantStages(); track s.key) {
+                        <mat-option [value]="s">{{ s.label }}</mat-option>
+                      }
+                    </mat-select>
+                  </mat-form-field>
+                  <mat-form-field appearance="outline">
+                    <mat-label>Novo vaso (L)</mat-label>
+                    <input matInput type="number" formControlName="pot_liters" />
+                  </mat-form-field>
+                  <mat-form-field appearance="outline">
+                    <mat-label>Recipiente</mat-label>
+                    <input matInput formControlName="container_label" placeholder="Ex: Vaso 5L" />
+                  </mat-form-field>
+                  <mat-form-field appearance="outline">
+                    <mat-label>Notas</mat-label>
+                    <input matInput formControlName="notes" />
+                  </mat-form-field>
+                  <div class="form-actions">
+                    <button mat-stroked-button color="primary" type="submit" [disabled]="transplantForm.invalid">Registrar Transplante</button>
+                  </div>
+                </form>
+
+                <ul class="training-list">
+                  @for (t of transplantsByPlant()[plant.id] ?? []; track t.id) {
+                    <li>
+                      <strong>{{ t.container_label || (t.pot_liters + 'L') }}</strong> — {{ t.date }}
+                      @if (t.notes) { <span> · {{ t.notes }}</span> }
+                      <button mat-icon-button (click)="removeTransplant(plant.id, t.id)">
                         <mat-icon>close</mat-icon>
                       </button>
                     </li>

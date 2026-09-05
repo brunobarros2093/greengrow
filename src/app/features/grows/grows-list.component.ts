@@ -10,7 +10,21 @@ import { MatInputModule } from '@angular/material/input';
 import { MatSelectModule } from '@angular/material/select';
 import { MatExpansionModule } from '@angular/material/expansion';
 import { ElectronService } from '../../core/electron.service';
-import { GROW_TYPES, Grow } from '../../core/models';
+import {
+  GROW_TYPES,
+  Grow,
+  PlantWithContext,
+  Watering,
+  computeWateringStatus,
+  wateringStatusLabelFor,
+  WateringStatus,
+} from '../../core/models';
+
+interface WateringAlert {
+  plant: PlantWithContext;
+  status: WateringStatus;
+  label: string;
+}
 
 @Component({
   selector: 'app-grows-list',
@@ -35,6 +49,7 @@ export class GrowsListComponent implements OnInit {
 
   readonly grows = signal<Grow[]>([]);
   readonly growTypes = GROW_TYPES;
+  readonly wateringAlerts = signal<WateringAlert[]>([]);
   editingId: string | null = null;
 
   form = this.fb.group({
@@ -48,10 +63,29 @@ export class GrowsListComponent implements OnInit {
 
   ngOnInit(): void {
     this.reload();
+    this.reloadWateringAlerts();
   }
 
   async reload(): Promise<void> {
     this.grows.set(await this.electron.api.grows.list());
+  }
+
+  async reloadWateringAlerts(): Promise<void> {
+    const plants: PlantWithContext[] = await this.electron.api.plants.listAllWithContext();
+    if (plants.length === 0) {
+      this.wateringAlerts.set([]);
+      return;
+    }
+    const lastByPlant: Record<string, Watering | null> = await this.electron.api.waterings.lastByPlantIds(plants.map((p) => p.id));
+    const alerts: WateringAlert[] = [];
+    for (const plant of plants) {
+      const info = computeWateringStatus(lastByPlant[plant.id]?.date);
+      if (info.status === 'atencao' || info.status === 'critico') {
+        alerts.push({ plant, status: info.status, label: wateringStatusLabelFor(info) });
+      }
+    }
+    alerts.sort((a, b) => (a.status === b.status ? 0 : a.status === 'critico' ? -1 : 1));
+    this.wateringAlerts.set(alerts);
   }
 
   edit(grow: Grow): void {

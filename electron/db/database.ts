@@ -2,7 +2,7 @@ import { DatabaseSync } from 'node:sqlite';
 import * as path from 'node:path';
 import * as fs from 'node:fs';
 import { app } from 'electron';
-import { SCHEMA_SQL } from './schema';
+import { SCHEMA_SQL, MIGRATIONS_SQL } from './schema';
 
 let db: DatabaseSync | null = null;
 
@@ -31,6 +31,13 @@ export function getDb(): DatabaseSync {
   fs.mkdirSync(getUserDataDir(), { recursive: true });
   db = new DatabaseSync(getDbPath());
   db.exec(SCHEMA_SQL);
+  for (const statement of MIGRATIONS_SQL) {
+    try {
+      db.exec(statement);
+    } catch {
+      // Column/index already exists from a previous run — safe to ignore.
+    }
+  }
   return db;
 }
 

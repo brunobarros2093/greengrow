@@ -13,6 +13,7 @@ import { MatTabsModule } from '@angular/material/tabs';
 import { MatChipsModule } from '@angular/material/chips';
 import { MatDividerModule } from '@angular/material/divider';
 import { MatCheckboxModule } from '@angular/material/checkbox';
+import { MatSlideToggleModule } from '@angular/material/slide-toggle';
 import { ElectronService } from '../../core/electron.service';
 import {
   Cycle,
@@ -25,8 +26,19 @@ import {
   JOURNAL_ENTRY_TYPES,
   JournalPhoto,
   Watering,
-  WATERING_TYPES,
   WateringStatus,
+  FEEDING_INPUT_TYPES,
+  feedingInputLabel,
+  derivedWateringType,
+  suggestNextFeedingInput,
+  computeWateringStatus,
+  wateringStatusLabelFor,
+  computePlantAge,
+  PlantTransplant,
+  TransplantStage,
+  buildTransplantStages,
+  computeTransplantSuggestion,
+  transplantSuggestionLabel,
 } from '../../core/models';
 
 type JournalPhotoWithData = JournalPhoto & { dataUrl: string };
@@ -49,6 +61,7 @@ type JournalPhotoWithData = JournalPhoto & { dataUrl: string };
     MatChipsModule,
     MatDividerModule,
     MatCheckboxModule,
+    MatSlideToggleModule,
   ],
   templateUrl: './cycle-detail.component.html',
 })
@@ -64,12 +77,16 @@ export class CycleDetailComponent implements OnInit {
   readonly photosByEntry = signal<Record<string, JournalPhotoWithData[]>>({});
   readonly wateringsByPlant = signal<Record<string, Watering[]>>({});
   readonly lastWateringByPlant = signal<Record<string, Watering | null>>({});
+  readonly transplantsByPlant = signal<Record<string, PlantTransplant[]>>({});
+  readonly lastTransplantByPlant = signal<Record<string, PlantTransplant | null>>({});
 
   readonly stages = CYCLE_STAGES;
   readonly seedTypes = SEED_TYPES;
   readonly trainingTechniques = TRAINING_TECHNIQUES;
   readonly journalTypes = JOURNAL_ENTRY_TYPES;
-  readonly wateringTypes = WATERING_TYPES;
+  readonly feedingInputTypes = FEEDING_INPUT_TYPES;
+  readonly suggestedInputType = signal<string>(FEEDING_INPUT_TYPES[0].value);
+  readonly transplantStages = signal<TransplantStage[]>(buildTransplantStages());
 
   growId = '';
   cycleId = '';
@@ -85,6 +102,7 @@ export class CycleDetailComponent implements OnInit {
     seed_type: ['feminizada'],
     pot_liters: [null as number | null],
     substrate: ['Super Solo Orgânico'],
+    planted_at: [new Date().toISOString().slice(0, 10), Validators.required],
   });
 
   trainingForm = this.fb.group({
@@ -103,7 +121,7 @@ export class CycleDetailComponent implements OnInit {
 
   wateringForm = this.fb.group({
     date: [new Date().toISOString().slice(0, 10), Validators.required],
-    type: ['agua_pura', Validators.required],
+    input_type: [FEEDING_INPUT_TYPES[0].value, Validators.required],
     volume_ml: [null as number | null],
     nutrients_used: [''],
     notes: [''],
@@ -111,16 +129,29 @@ export class CycleDetailComponent implements OnInit {
 
   bulkWateringForm = this.fb.group({
     date: [new Date().toISOString().slice(0, 10), Validators.required],
-    type: ['agua_pura', Validators.required],
+    input_type: [FEEDING_INPUT_TYPES[0].value, Validators.required],
     volume_ml: [null as number | null],
     nutrients_used: [''],
+    notes: [''],
+  });
+
+  transplantForm = this.fb.group({
+    date: [new Date().toISOString().slice(0, 10), Validators.required],
+    pot_liters: [null as number | null, Validators.required],
+    container_label: [''],
     notes: [''],
   });
 
   ngOnInit(): void {
     this.growId = this.route.snapshot.paramMap.get('growId')!;
     this.cycleId = this.route.snapshot.paramMap.get('cycleId')!;
+    this.loadPotSizes();
     this.reload();
+  }
+
+  async loadPotSizes(): Promise<void> {
+    const sizes = await this.electron.api.settings.getPotSizes();
+    this.transplantStages.set(buildTransplantStages(sizes));
   }
 
   async reload(): Promise<void> {
@@ -128,7 +159,28 @@ export class CycleDetailComponent implements OnInit {
     this.plants.set(await this.electron.api.plants.listByCycle(this.cycleId));
     this.journalEntries.set(await this.electron.api.journal.listByCycle(this.cycleId));
     await this.reloadLastWaterings();
+    await this.reloadFeedingSuggestion();
+    await this.reloadLastTransplants();
   }
+
+  async reloadLastTransplants(): Promise<void> {
+    const plantIds = this.plants().map((p) => p.id);
+    if (plantIds.length === 0) {
+      this.lastTransplantByPlant.set({});
+      return;
+    }
+    this.lastTransplantByPlant.set(await this.electron.api.plants.lastTransplantByPlantIds(plantIds));
+  }
+
+  async reloadFeedingSuggestion(): Promise<void> {
+    const lastInputType = await this.electron.api.waterings.getLastCycleInputType(this.cycleId);
+    const suggestion = suggestNextFeedingInput(lastInputType);
+    this.suggestedInputType.set(suggestion);
+    this.wateringForm.patchValue({ input_type: suggestion });
+    this.bulkWateringForm.patchValue({ input_type: suggestion });
+  }
+
+  readonly feedingInputLabel = feedingInputLabel;
 
   async reloadLastWaterings(): Promise<void> {
     const plantIds = this.plants().map((p) => p.id);
@@ -150,8 +202,25 @@ export class CycleDetailComponent implements OnInit {
   async addPlant(): Promise<void> {
     if (this.plantForm.invalid) return;
     await this.electron.api.plants.create({ ...this.plantForm.getRawValue(), cycle_id: this.cycleId });
-    this.plantForm.reset({ tag: '', strain: '', seed_type: 'feminizada', pot_liters: null, substrate: 'Super Solo Orgânico' });
+    this.plantForm.reset({
+      tag: '',
+      strain: '',
+      seed_type: 'feminizada',
+      pot_liters: null,
+      substrate: 'Super Solo Orgânico',
+      planted_at: new Date().toISOString().slice(0, 10),
+    });
     await this.reload();
+  }
+
+  plantAge(plant: Plant) {
+    return computePlantAge(plant.planted_at);
+  }
+
+  plantAgeLabel(plant: Plant): string {
+    const age = this.plantAge(plant);
+    if (!age) return 'Data de plantio não informada';
+    return `${age.days} dia(s) de vida · Semana ${age.week}`;
   }
 
   async removePlant(id: string): Promise<void> {
@@ -170,6 +239,8 @@ export class CycleDetailComponent implements OnInit {
     this.trainingsByPlant.update((m) => ({ ...m, [plant.id]: trainings }));
     const waterings = await this.electron.api.waterings.listByPlant(plant.id);
     this.wateringsByPlant.update((m) => ({ ...m, [plant.id]: waterings }));
+    const transplants = await this.electron.api.plants.listTransplants(plant.id);
+    this.transplantsByPlant.update((m) => ({ ...m, [plant.id]: transplants }));
   }
 
   async addTraining(plantId: string): Promise<void> {
@@ -190,13 +261,65 @@ export class CycleDetailComponent implements OnInit {
     return this.trainingTechniques.find((t) => t.value === value)?.label ?? value;
   }
 
+  transplantSuggestion(plant: Plant) {
+    return computeTransplantSuggestion(
+      plant.planted_at,
+      this.lastTransplantByPlant()[plant.id],
+      this.transplantStages(),
+      plant.is_final_pot === 1,
+    );
+  }
+
+  transplantSuggestionLabel(plant: Plant): string {
+    return transplantSuggestionLabel(this.transplantSuggestion(plant));
+  }
+
+  transplantSuggestionOverdue(plant: Plant): boolean {
+    const s = this.transplantSuggestion(plant);
+    return !!s && !s.isFinalStage && s.dueInDays !== null && s.dueInDays <= 0;
+  }
+
+  async toggleFinalPot(plant: Plant): Promise<void> {
+    const isFinal = plant.is_final_pot === 1 ? 0 : 1;
+    await this.electron.api.plants.update(plant.id, { is_final_pot: isFinal });
+    await this.reload();
+  }
+
+  onTransplantStagePick(stage: TransplantStage): void {
+    this.transplantForm.patchValue({ pot_liters: stage.potLiters, container_label: stage.label });
+  }
+
+  async addTransplant(plantId: string): Promise<void> {
+    if (this.transplantForm.invalid) return;
+    await this.electron.api.plants.addTransplant({ ...this.transplantForm.getRawValue(), plant_id: plantId });
+    this.transplantForm.reset({ date: new Date().toISOString().slice(0, 10), pot_liters: null, container_label: '', notes: '' });
+    const transplants = await this.electron.api.plants.listTransplants(plantId);
+    this.transplantsByPlant.update((m) => ({ ...m, [plantId]: transplants }));
+    await this.reload();
+  }
+
+  async removeTransplant(plantId: string, transplantId: string): Promise<void> {
+    await this.electron.api.plants.removeTransplant(transplantId);
+    const transplants = await this.electron.api.plants.listTransplants(plantId);
+    this.transplantsByPlant.update((m) => ({ ...m, [plantId]: transplants }));
+    await this.reloadLastTransplants();
+  }
+
   async addWatering(plantId: string): Promise<void> {
     if (this.wateringForm.invalid) return;
-    await this.electron.api.waterings.create({ ...this.wateringForm.getRawValue(), plant_id: plantId, cycle_id: this.cycleId });
-    this.wateringForm.reset({ date: new Date().toISOString().slice(0, 10), type: 'agua_pura', volume_ml: null, nutrients_used: '', notes: '' });
+    const { input_type, ...rest } = this.wateringForm.getRawValue();
+    await this.electron.api.waterings.create({
+      ...rest,
+      input_type,
+      type: derivedWateringType(input_type!),
+      plant_id: plantId,
+      cycle_id: this.cycleId,
+    });
+    this.wateringForm.reset({ date: new Date().toISOString().slice(0, 10), input_type: this.suggestedInputType(), volume_ml: null, nutrients_used: '', notes: '' });
     const waterings = await this.electron.api.waterings.listByPlant(plantId);
     this.wateringsByPlant.update((m) => ({ ...m, [plantId]: waterings }));
     await this.reloadLastWaterings();
+    await this.reloadFeedingSuggestion();
   }
 
   async removeWatering(plantId: string, wateringId: string): Promise<void> {
@@ -204,47 +327,19 @@ export class CycleDetailComponent implements OnInit {
     const waterings = await this.electron.api.waterings.listByPlant(plantId);
     this.wateringsByPlant.update((m) => ({ ...m, [plantId]: waterings }));
     await this.reloadLastWaterings();
-  }
-
-  wateringTypeLabel(value: string): string {
-    return this.wateringTypes.find((t) => t.value === value)?.label ?? value;
+    await this.reloadFeedingSuggestion();
   }
 
   daysSinceLastWatering(plantId: string): number | null {
-    const last = this.lastWateringByPlant()[plantId];
-    if (!last) return null;
-    const diffMs = Date.now() - new Date(last.date + 'T00:00:00').getTime();
-    return Math.floor(diffMs / 86400000);
+    return computeWateringStatus(this.lastWateringByPlant()[plantId]?.date).days;
   }
 
   wateringStatus(plantId: string): WateringStatus {
-    const days = this.daysSinceLastWatering(plantId);
-    if (days === null) return 'sem_registro';
-    if (days <= 2) return 'normal';
-    if (days <= 4) return 'atencao';
-    return 'critico';
+    return computeWateringStatus(this.lastWateringByPlant()[plantId]?.date).status;
   }
 
   wateringStatusLabel(plantId: string): string {
-    const days = this.daysSinceLastWatering(plantId);
-    switch (this.wateringStatus(plantId)) {
-      case 'sem_registro':
-        return 'Sem registro de rega';
-      case 'normal':
-        return `${days} dia(s) desde a última rega`;
-      case 'atencao':
-        return `${days} dias — janela ideal de rega / verificar peso do vaso`;
-      case 'critico':
-        return `${days} dias — alerta crítico de solo seco`;
-    }
-  }
-
-  nextFertirrigationDate(plantId: string): string | null {
-    const last = this.lastWateringByPlant()[plantId];
-    if (!last || last.type !== 'fertirrigacao') return null;
-    const next = new Date(last.date + 'T00:00:00');
-    next.setDate(next.getDate() + 7);
-    return next.toISOString().slice(0, 10);
+    return wateringStatusLabelFor(computeWateringStatus(this.lastWateringByPlant()[plantId]?.date));
   }
 
   toggleBulkWateringMode(): void {
@@ -275,11 +370,18 @@ export class CycleDetailComponent implements OnInit {
     this.bulkBusy = true;
     try {
       const plantIds = Array.from(this.selectedPlantIds());
-      await this.electron.api.waterings.createBulk(plantIds, { ...this.bulkWateringForm.getRawValue(), cycle_id: this.cycleId });
-      this.bulkWateringForm.reset({ date: new Date().toISOString().slice(0, 10), type: 'agua_pura', volume_ml: null, nutrients_used: '', notes: '' });
+      const { input_type, ...rest } = this.bulkWateringForm.getRawValue();
+      await this.electron.api.waterings.createBulk(plantIds, {
+        ...rest,
+        input_type,
+        type: derivedWateringType(input_type!),
+        cycle_id: this.cycleId,
+      });
+      this.bulkWateringForm.reset({ date: new Date().toISOString().slice(0, 10), input_type: this.suggestedInputType(), volume_ml: null, nutrients_used: '', notes: '' });
       this.selectedPlantIds.set(new Set());
       this.bulkWateringMode.set(false);
       await this.reloadLastWaterings();
+      await this.reloadFeedingSuggestion();
       if (this.expandedPlantId) {
         const waterings = await this.electron.api.waterings.listByPlant(this.expandedPlantId);
         this.wateringsByPlant.update((m) => ({ ...m, [this.expandedPlantId as string]: waterings }));

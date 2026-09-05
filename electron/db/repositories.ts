@@ -5,6 +5,44 @@ function now(): string {
   return new Date().toISOString();
 }
 
+// ---------- App Settings ----------
+export interface PotSizes {
+  cup_liters: number;
+  intermediate_liters: number;
+  final_liters: number;
+}
+
+const DEFAULT_POT_SIZES: PotSizes = {
+  cup_liters: 0.5,
+  intermediate_liters: 5,
+  final_liters: 12,
+};
+
+export const SettingsRepo = {
+  get(key: string): string | null {
+    const row = getDb().prepare('SELECT value FROM app_settings WHERE key = ?').get(key) as { value: string } | undefined;
+    return row?.value ?? null;
+  },
+  set(key: string, value: string): void {
+    getDb()
+      .prepare('INSERT INTO app_settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value')
+      .run(key, value);
+  },
+  getPotSizes(): PotSizes {
+    return {
+      cup_liters: Number(this.get('pot_size.cup_liters')) || DEFAULT_POT_SIZES.cup_liters,
+      intermediate_liters: Number(this.get('pot_size.intermediate_liters')) || DEFAULT_POT_SIZES.intermediate_liters,
+      final_liters: Number(this.get('pot_size.final_liters')) || DEFAULT_POT_SIZES.final_liters,
+    };
+  },
+  setPotSizes(sizes: PotSizes): PotSizes {
+    this.set('pot_size.cup_liters', String(sizes.cup_liters));
+    this.set('pot_size.intermediate_liters', String(sizes.intermediate_liters));
+    this.set('pot_size.final_liters', String(sizes.final_liters));
+    return this.getPotSizes();
+  },
+};
+
 // ---------- Grows ----------
 export interface Grow {
   id: string;
@@ -111,6 +149,8 @@ export interface Plant {
   seed_type: string | null;
   pot_liters: number | null;
   substrate: string | null;
+  planted_at: string | null;
+  is_final_pot: number;
   created_at: string;
   updated_at: string;
 }
@@ -123,22 +163,61 @@ export interface PlantTraining {
   notes: string | null;
 }
 
+export interface PlantTransplant {
+  id: string;
+  plant_id: string;
+  date: string;
+  pot_liters: number;
+  container_label: string | null;
+  notes: string | null;
+  created_at: string;
+}
+
+export interface PlantWithContext extends Plant {
+  cycle_name: string;
+  grow_id: string;
+  grow_name: string;
+}
+
 export const PlantsRepo = {
   listByCycle(cycleId: string): Plant[] {
     return getDb().prepare('SELECT * FROM plants WHERE cycle_id = ? ORDER BY created_at DESC').all(cycleId) as unknown as Plant[];
   },
+  listAllWithContext(): PlantWithContext[] {
+    return getDb()
+      .prepare(
+        `SELECT plants.*, cycles.name AS cycle_name, cycles.grow_id AS grow_id, grows.name AS grow_name
+         FROM plants
+         JOIN cycles ON cycles.id = plants.cycle_id
+         JOIN grows ON grows.id = cycles.grow_id
+         ORDER BY plants.tag ASC`
+      )
+      .all() as unknown as PlantWithContext[];
+  },
   get(id: string): Plant | undefined {
     return getDb().prepare('SELECT * FROM plants WHERE id = ?').get(id) as unknown as Plant | undefined;
   },
-  create(input: Omit<Plant, 'id' | 'created_at' | 'updated_at'>): Plant {
+  create(input: Omit<Plant, 'id' | 'created_at' | 'updated_at' | 'is_final_pot'> & { is_final_pot?: number }): Plant {
     const id = randomUUID();
     const ts = now();
     getDb()
       .prepare(
-        `INSERT INTO plants (id, cycle_id, tag, strain, seed_type, pot_liters, substrate, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        `INSERT INTO plants (id, cycle_id, tag, strain, seed_type, pot_liters, substrate, planted_at, is_final_pot, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
       )
-      .run(id, input.cycle_id, input.tag, input.strain, input.seed_type, input.pot_liters, input.substrate, ts, ts);
+      .run(
+        id,
+        input.cycle_id,
+        input.tag,
+        input.strain,
+        input.seed_type,
+        input.pot_liters,
+        input.substrate,
+        input.planted_at,
+        input.is_final_pot ?? 0,
+        ts,
+        ts
+      );
     return this.get(id)!;
   },
   update(id: string, input: Partial<Omit<Plant, 'id' | 'created_at' | 'updated_at'>>): Plant {
@@ -147,9 +226,20 @@ export const PlantsRepo = {
     const merged = { ...current, ...input };
     getDb()
       .prepare(
-        `UPDATE plants SET cycle_id=?, tag=?, strain=?, seed_type=?, pot_liters=?, substrate=?, updated_at=? WHERE id=?`
+        `UPDATE plants SET cycle_id=?, tag=?, strain=?, seed_type=?, pot_liters=?, substrate=?, planted_at=?, is_final_pot=?, updated_at=? WHERE id=?`
       )
-      .run(merged.cycle_id, merged.tag, merged.strain, merged.seed_type, merged.pot_liters, merged.substrate, now(), id);
+      .run(
+        merged.cycle_id,
+        merged.tag,
+        merged.strain,
+        merged.seed_type,
+        merged.pot_liters,
+        merged.substrate,
+        merged.planted_at,
+        merged.is_final_pot,
+        now(),
+        id
+      );
     return this.get(id)!;
   },
   remove(id: string): void {
@@ -167,6 +257,35 @@ export const PlantsRepo = {
   },
   removeTraining(id: string): void {
     getDb().prepare('DELETE FROM plant_trainings WHERE id = ?').run(id);
+  },
+  listTransplants(plantId: string): PlantTransplant[] {
+    return getDb()
+      .prepare('SELECT * FROM plant_transplants WHERE plant_id = ? ORDER BY date DESC, created_at DESC')
+      .all(plantId) as unknown as PlantTransplant[];
+  },
+  lastTransplantByPlantIds(plantIds: string[]): Record<string, PlantTransplant | null> {
+    const result: Record<string, PlantTransplant | null> = {};
+    const stmt = getDb().prepare('SELECT * FROM plant_transplants WHERE plant_id = ? ORDER BY date DESC, created_at DESC LIMIT 1');
+    for (const id of plantIds) {
+      result[id] = (stmt.get(id) as unknown as PlantTransplant) ?? null;
+    }
+    return result;
+  },
+  addTransplant(input: Omit<PlantTransplant, 'id' | 'created_at'>): PlantTransplant {
+    const id = randomUUID();
+    const ts = now();
+    getDb()
+      .prepare(
+        `INSERT INTO plant_transplants (id, plant_id, date, pot_liters, container_label, notes, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`
+      )
+      .run(id, input.plant_id, input.date, input.pot_liters, input.container_label, input.notes, ts);
+    // Mantém o campo pot_liters da planta sincronizado com o transplante mais recente.
+    this.update(input.plant_id, { pot_liters: input.pot_liters });
+    return getDb().prepare('SELECT * FROM plant_transplants WHERE id = ?').get(id) as unknown as PlantTransplant;
+  },
+  removeTransplant(id: string): void {
+    getDb().prepare('DELETE FROM plant_transplants WHERE id = ?').run(id);
   },
 };
 
@@ -337,6 +456,7 @@ export interface Watering {
   cycle_id: string | null;
   date: string;
   type: string;
+  input_type: string | null;
   nutrients_used: string | null;
   volume_ml: number | null;
   notes: string | null;
@@ -358,22 +478,32 @@ export const WateringsRepo = {
     }
     return result;
   },
+  getLastCycleInputType(cycleId: string): string | null {
+    const row = getDb()
+      .prepare(
+        `SELECT input_type FROM waterings
+         WHERE cycle_id = ? AND input_type IS NOT NULL
+         ORDER BY date DESC, created_at DESC LIMIT 1`
+      )
+      .get(cycleId) as { input_type: string } | undefined;
+    return row?.input_type ?? null;
+  },
   create(input: Omit<Watering, 'id' | 'created_at'>): Watering {
     const id = randomUUID();
     const ts = now();
     getDb()
       .prepare(
-        `INSERT INTO waterings (id, plant_id, cycle_id, date, type, nutrients_used, volume_ml, notes, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        `INSERT INTO waterings (id, plant_id, cycle_id, date, type, input_type, nutrients_used, volume_ml, notes, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
       )
-      .run(id, input.plant_id, input.cycle_id, input.date, input.type, input.nutrients_used, input.volume_ml, input.notes, ts);
+      .run(id, input.plant_id, input.cycle_id, input.date, input.type, input.input_type, input.nutrients_used, input.volume_ml, input.notes, ts);
     return getDb().prepare('SELECT * FROM waterings WHERE id = ?').get(id) as unknown as Watering;
   },
   createBulk(plantIds: string[], shared: Omit<Watering, 'id' | 'created_at' | 'plant_id'>): Watering[] {
     const db = getDb();
     const stmt = db.prepare(
-      `INSERT INTO waterings (id, plant_id, cycle_id, date, type, nutrients_used, volume_ml, notes, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      `INSERT INTO waterings (id, plant_id, cycle_id, date, type, input_type, nutrients_used, volume_ml, notes, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     );
     const ts = now();
     const ids: string[] = [];
@@ -382,7 +512,18 @@ export const WateringsRepo = {
       for (const plantId of plantIds) {
         const id = randomUUID();
         ids.push(id);
-        stmt.run(id, plantId, shared.cycle_id, shared.date, shared.type, shared.nutrients_used, shared.volume_ml, shared.notes, ts);
+        stmt.run(
+          id,
+          plantId,
+          shared.cycle_id,
+          shared.date,
+          shared.type,
+          shared.input_type,
+          shared.nutrients_used,
+          shared.volume_ml,
+          shared.notes,
+          ts
+        );
       }
       db.exec('COMMIT');
     } catch (err) {

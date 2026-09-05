@@ -2,6 +2,39 @@
 
 <mat-card class="form-panel">
   <mat-card-header>
+    <mat-card-title>Tamanhos Padrão de Vaso (Transplantes)</mat-card-title>
+    <mat-card-subtitle>
+      Usado para sugerir automaticamente o próximo transplante de cada planta no ciclo perpétuo.
+    </mat-card-subtitle>
+  </mat-card-header>
+  <mat-card-content>
+    <form [formGroup]="potSizesForm" (ngSubmit)="savePotSizes()" class="grid-form">
+      <mat-form-field appearance="outline">
+        <mat-label>Copo inicial (L)</mat-label>
+        <input matInput type="number" step="0.1" formControlName="cup_liters" />
+      </mat-form-field>
+      <mat-form-field appearance="outline">
+        <mat-label>Vaso intermediário (L)</mat-label>
+        <input matInput type="number" step="0.1" formControlName="intermediate_liters" />
+      </mat-form-field>
+      <mat-form-field appearance="outline">
+        <mat-label>Vaso final (L)</mat-label>
+        <input matInput type="number" step="0.1" formControlName="final_liters" />
+      </mat-form-field>
+      <div class="form-actions">
+        <button mat-flat-button color="primary" type="submit" [disabled]="potSizesForm.invalid || potSizesBusy">
+          Salvar Tamanhos
+        </button>
+      </div>
+    </form>
+    @if (potSizesMessage) {
+      <p>{{ potSizesMessage }}</p>
+    }
+  </mat-card-content>
+</mat-card>
+
+<mat-card class="form-panel">
+  <mat-card-header>
     <mat-card-title>Backup e Restauração do Banco de Dados</mat-card-title>
     <mat-card-subtitle>Arquivo atual: {{ dbPath() || '—' }}</mat-card-subtitle>
   </mat-card-header>

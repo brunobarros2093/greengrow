@@ -13,6 +13,7 @@ import {
   MipRepo,
   JournalRepo,
   WateringsRepo,
+  SettingsRepo,
 } from '../db/repositories';
 
 function handle(channel: string, fn: (...args: any[]) => any) {
@@ -26,6 +27,10 @@ function handle(channel: string, fn: (...args: any[]) => any) {
 }
 
 export function registerIpcHandlers(): void {
+  // App Settings
+  handle('settings:getPotSizes', () => SettingsRepo.getPotSizes());
+  handle('settings:setPotSizes', (sizes: any) => SettingsRepo.setPotSizes(sizes));
+
   // Grows
   handle('grows:list', () => GrowsRepo.list());
   handle('grows:get', (id: string) => GrowsRepo.get(id));
@@ -43,6 +48,7 @@ export function registerIpcHandlers(): void {
 
   // Plants
   handle('plants:listByCycle', (cycleId: string) => PlantsRepo.listByCycle(cycleId));
+  handle('plants:listAllWithContext', () => PlantsRepo.listAllWithContext());
   handle('plants:get', (id: string) => PlantsRepo.get(id));
   handle('plants:create', (input: any) => PlantsRepo.create(input));
   handle('plants:update', (id: string, input: any) => PlantsRepo.update(id, input));
@@ -50,6 +56,10 @@ export function registerIpcHandlers(): void {
   handle('plants:listTrainings', (plantId: string) => PlantsRepo.listTrainings(plantId));
   handle('plants:addTraining', (input: any) => PlantsRepo.addTraining(input));
   handle('plants:removeTraining', (id: string) => PlantsRepo.removeTraining(id));
+  handle('plants:listTransplants', (plantId: string) => PlantsRepo.listTransplants(plantId));
+  handle('plants:lastTransplantByPlantIds', (plantIds: string[]) => PlantsRepo.lastTransplantByPlantIds(plantIds));
+  handle('plants:addTransplant', (input: any) => PlantsRepo.addTransplant(input));
+  handle('plants:removeTransplant', (id: string) => PlantsRepo.removeTransplant(id));
 
   // Legal Vault
   handle('vault:list', () => LegalVaultRepo.list());
@@ -147,6 +157,7 @@ export function registerIpcHandlers(): void {
   handle('waterings:listByPlant', (plantId: string) => WateringsRepo.listByPlant(plantId));
   handle('waterings:listByCycle', (cycleId: string) => WateringsRepo.listByCycle(cycleId));
   handle('waterings:lastByPlantIds', (plantIds: string[]) => WateringsRepo.lastByPlantIds(plantIds));
+  handle('waterings:getLastCycleInputType', (cycleId: string) => WateringsRepo.getLastCycleInputType(cycleId));
   handle('waterings:create', (input: any) => WateringsRepo.create(input));
   handle('waterings:createBulk', (plantIds: string[], shared: any) => WateringsRepo.createBulk(plantIds, shared));
   handle('waterings:remove', (id: string) => WateringsRepo.remove(id));

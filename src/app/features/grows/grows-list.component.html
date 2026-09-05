@@ -1,5 +1,34 @@
 <h1>Grows &amp; Estufas</h1>
 
+@if (wateringAlerts().length > 0) {
+  <mat-card class="alerts-panel">
+    <mat-card-header>
+      <mat-card-title>
+        <mat-icon>notifications_active</mat-icon>
+        Alertas de Rega ({{ wateringAlerts().length }})
+      </mat-card-title>
+      <mat-card-subtitle>Plantas que atingiram a janela ideal de rega ou estão com solo seco.</mat-card-subtitle>
+    </mat-card-header>
+    <mat-card-content>
+      <ul class="alerts-list">
+        @for (alert of wateringAlerts(); track alert.plant.id) {
+          <li>
+            <a [routerLink]="['/grows', alert.plant.grow_id, 'cycles', alert.plant.cycle_id]" class="alert-link">
+              <span class="watering-badge" [class]="'status-' + alert.status">
+                <mat-icon>water_drop</mat-icon>
+                {{ alert.label }}
+              </span>
+              <span class="alert-plant-info">
+                {{ alert.plant.tag }} — {{ alert.plant.grow_name }} / {{ alert.plant.cycle_name }}
+              </span>
+            </a>
+          </li>
+        }
+      </ul>
+    </mat-card-content>
+  </mat-card>
+}
+
 <mat-expansion-panel [expanded]="true" class="form-panel">
   <mat-expansion-panel-header>
     <mat-panel-title>{{ editingId ? 'Editar Grow' : 'Novo Grow' }}</mat-panel-title>

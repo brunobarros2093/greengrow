@@ -1,6 +1,11 @@
 export const SCHEMA_SQL = `
 PRAGMA foreign_keys = ON;
 
+CREATE TABLE IF NOT EXISTS app_settings (
+  key TEXT PRIMARY KEY,
+  value TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS grows (
   id TEXT PRIMARY KEY,
   name TEXT NOT NULL,
@@ -33,6 +38,8 @@ CREATE TABLE IF NOT EXISTS plants (
   seed_type TEXT, -- regular|feminizada|autoflorescente|clone
   pot_liters REAL,
   substrate TEXT,
+  planted_at TEXT, -- data de plantio/germinação, usada para calcular dias de vida e semana
+  is_final_pot INTEGER NOT NULL DEFAULT 0, -- 1 = planta ficará neste vaso, não sugerir mais transplantes
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
   updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
@@ -43,6 +50,16 @@ CREATE TABLE IF NOT EXISTS plant_trainings (
   technique TEXT NOT NULL, -- topping|lst|scrog|lollipopping
   applied_at TEXT NOT NULL,
   notes TEXT
+);
+
+CREATE TABLE IF NOT EXISTS plant_transplants (
+  id TEXT PRIMARY KEY,
+  plant_id TEXT NOT NULL REFERENCES plants(id) ON DELETE CASCADE,
+  date TEXT NOT NULL,
+  pot_liters REAL NOT NULL,
+  container_label TEXT,
+  notes TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
 CREATE TABLE IF NOT EXISTS legal_vault_documents (
@@ -124,6 +141,7 @@ CREATE TABLE IF NOT EXISTS waterings (
   cycle_id TEXT REFERENCES cycles(id) ON DELETE CASCADE,
   date TEXT NOT NULL,
   type TEXT NOT NULL DEFAULT 'agua_pura', -- agua_pura|fertirrigacao
+  input_type TEXT, -- bokashi|humus_tea|algafish|water_only (rotina de fertirrigação orgânica)
   nutrients_used TEXT,
   volume_ml REAL,
   notes TEXT,
@@ -133,6 +151,7 @@ CREATE TABLE IF NOT EXISTS waterings (
 CREATE INDEX IF NOT EXISTS idx_cycles_grow ON cycles(grow_id);
 CREATE INDEX IF NOT EXISTS idx_plants_cycle ON plants(cycle_id);
 CREATE INDEX IF NOT EXISTS idx_trainings_plant ON plant_trainings(plant_id);
+CREATE INDEX IF NOT EXISTS idx_transplants_plant ON plant_transplants(plant_id);
 CREATE INDEX IF NOT EXISTS idx_recipe_items_recipe ON supersolo_recipe_items(recipe_id);
 CREATE INDEX IF NOT EXISTS idx_mip_grow ON mip_calendar_events(grow_id);
 CREATE INDEX IF NOT EXISTS idx_journal_cycle ON journal_entries(cycle_id);
@@ -140,3 +159,12 @@ CREATE INDEX IF NOT EXISTS idx_journal_photos_entry ON journal_photos(journal_en
 CREATE INDEX IF NOT EXISTS idx_waterings_plant ON waterings(plant_id);
 CREATE INDEX IF NOT EXISTS idx_waterings_cycle ON waterings(cycle_id);
 `;
+
+// Additive migrations for databases created before a schema change.
+// Each statement is executed individually and failures (e.g. "duplicate column") are ignored.
+export const MIGRATIONS_SQL: string[] = [
+  'ALTER TABLE waterings ADD COLUMN input_type TEXT',
+  'ALTER TABLE plants ADD COLUMN planted_at TEXT',
+  `UPDATE plants SET planted_at = (SELECT start_date FROM cycles WHERE cycles.id = plants.cycle_id) WHERE planted_at IS NULL`,
+  'ALTER TABLE plants ADD COLUMN is_final_pot INTEGER NOT NULL DEFAULT 0',
+];
