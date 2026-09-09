@@ -158,6 +158,7 @@ export function registerIpcHandlers(): void {
   handle('waterings:listByCycle', (cycleId: string) => WateringsRepo.listByCycle(cycleId));
   handle('waterings:lastByPlantIds', (plantIds: string[]) => WateringsRepo.lastByPlantIds(plantIds));
   handle('waterings:getLastCycleInputType', (cycleId: string) => WateringsRepo.getLastCycleInputType(cycleId));
+  handle('waterings:getLastCycleFeeding', (cycleId: string) => WateringsRepo.getLastCycleFeeding(cycleId));
   handle('waterings:create', (input: any) => WateringsRepo.create(input));
   handle('waterings:createBulk', (plantIds: string[], shared: any) => WateringsRepo.createBulk(plantIds, shared));
   handle('waterings:remove', (id: string) => WateringsRepo.remove(id));

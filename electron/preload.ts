@@ -86,6 +86,7 @@ const api = {
     listByCycle: (cycleId: string) => invoke('waterings:listByCycle', cycleId),
     lastByPlantIds: (plantIds: string[]) => invoke('waterings:lastByPlantIds', plantIds),
     getLastCycleInputType: (cycleId: string) => invoke('waterings:getLastCycleInputType', cycleId),
+    getLastCycleFeeding: (cycleId: string) => invoke('waterings:getLastCycleFeeding', cycleId),
     create: (input: any) => invoke('waterings:create', input),
     createBulk: (plantIds: string[], shared: any) => invoke('waterings:createBulk', plantIds, shared),
     remove: (id: string) => invoke('waterings:remove', id),

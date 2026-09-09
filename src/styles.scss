@@ -332,6 +332,11 @@ mat-card.form-panel {
   color: #1b5e20;
 }
 
+.feeding-suggestion-banner.overdue {
+  background: rgba(230, 81, 0, 0.12);
+  color: #e65100;
+}
+
 .bulk-watering-toolbar {
   display: flex;
   align-items: center;

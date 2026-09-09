@@ -488,6 +488,17 @@ export const WateringsRepo = {
       .get(cycleId) as { input_type: string } | undefined;
     return row?.input_type ?? null;
   },
+  /** Última fertirrigação real do ciclo (ignora regas de água pura), usada para o rodízio semanal de insumos. */
+  getLastCycleFeeding(cycleId: string): { date: string; input_type: string } | null {
+    const row = getDb()
+      .prepare(
+        `SELECT date, input_type FROM waterings
+         WHERE cycle_id = ? AND input_type IS NOT NULL AND input_type != 'water_only'
+         ORDER BY date DESC, created_at DESC LIMIT 1`
+      )
+      .get(cycleId) as { date: string; input_type: string } | undefined;
+    return row ?? null;
+  },
   create(input: Omit<Watering, 'id' | 'created_at'>): Watering {
     const id = randomUUID();
     const ts = now();

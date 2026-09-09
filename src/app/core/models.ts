@@ -343,7 +343,17 @@ export const FEEDING_INPUT_TYPES: { value: string; label: string; description: s
   { value: 'water_only', label: 'Água Pura', description: 'Lavagem de sais e controle de dry-back' },
 ];
 
-export const FEEDING_ROTATION_ORDER = ['bokashi', 'humus_tea', 'algafish', 'water_only'];
+/**
+ * Rodízio semanal de fertirrigação orgânica (Bokashi Líquido, Chá de Húmus, Algafish).
+ * Segundo as apostilas de referência, Bokashi e Algafish são aplicados semanalmente
+ * (podendo ser misturados), enquanto o Chá de Húmus é mais esparso — aqui simplificado
+ * como parte do mesmo rodízio semanal por praticidade. Água Pura não entra no rodízio:
+ * é a rega comum entre uma fertirrigação e outra, registrada à parte.
+ */
+export const FEEDING_ROTATION_ORDER = ['bokashi', 'humus_tea', 'algafish'];
+
+/** Intervalo mínimo recomendado entre duas fertirrigações (aplicação semanal). */
+export const FEEDING_INTERVAL_DAYS = 7;
 
 export function feedingInputLabel(value: string | null): string {
   return FEEDING_INPUT_TYPES.find((i) => i.value === value)?.label ?? (value ?? '—');
@@ -354,12 +364,47 @@ export function derivedWateringType(inputType: string): string {
   return inputType === 'water_only' ? 'agua_pura' : 'fertirrigacao';
 }
 
-/** Aplica a regra de rodízio: Bokashi → Chá de Húmus → Algafish → Água Pura → repete. */
-export function suggestNextFeedingInput(lastInputType: string | null): string {
-  if (!lastInputType) return FEEDING_ROTATION_ORDER[0];
-  const idx = FEEDING_ROTATION_ORDER.indexOf(lastInputType);
+/** Escolhe o próximo insumo do rodízio, sempre diferente do último aplicado. */
+function nextRotationInput(lastInputType: string | null): string {
+  const idx = lastInputType ? FEEDING_ROTATION_ORDER.indexOf(lastInputType) : -1;
   if (idx === -1) return FEEDING_ROTATION_ORDER[0];
   return FEEDING_ROTATION_ORDER[(idx + 1) % FEEDING_ROTATION_ORDER.length];
+}
+
+/** @deprecated use computeFeedingSuggestion, que também respeita o intervalo semanal. */
+export function suggestNextFeedingInput(lastInputType: string | null): string {
+  return nextRotationInput(lastInputType);
+}
+
+export interface FeedingSuggestion {
+  nextInputType: string;
+  dueDate: string;
+  dueInDays: number;
+  isOverdue: boolean;
+}
+
+/**
+ * Sugere o próximo insumo de fertirrigação (sempre diferente do último aplicado)
+ * e a data em que ele deve ser aplicado (uma semana após a última fertirrigação real —
+ * regas de água pura não contam para esse cálculo).
+ */
+export function computeFeedingSuggestion(
+  lastFeeding: { date: string; input_type: string } | null | undefined,
+): FeedingSuggestion {
+  const nextInputType = nextRotationInput(lastFeeding?.input_type ?? null);
+  if (!lastFeeding) {
+    return { nextInputType, dueDate: new Date().toISOString().slice(0, 10), dueInDays: 0, isOverdue: false };
+  }
+  const dueDate = addDaysToDateStr(lastFeeding.date, FEEDING_INTERVAL_DAYS);
+  const dueInDays = daysBetweenTodayAnd(dueDate);
+  return { nextInputType, dueDate, dueInDays, isOverdue: dueInDays <= 0 };
+}
+
+export function feedingSuggestionLabel(s: FeedingSuggestion): string {
+  const inputLabel = feedingInputLabel(s.nextInputType);
+  if (s.dueInDays > 0) return `Próxima fertirrigação em ~${s.dueInDays} dia(s): ${inputLabel}`;
+  if (s.dueInDays === 0) return `Fertirrigação de hoje: ${inputLabel}`;
+  return `Fertirrigação atrasada ${Math.abs(s.dueInDays)} dia(s): ${inputLabel}`;
 }
 
 export type WateringStatus = 'sem_registro' | 'normal' | 'atencao' | 'critico';

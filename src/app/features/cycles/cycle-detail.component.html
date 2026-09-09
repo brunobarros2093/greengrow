@@ -56,11 +56,9 @@
           </form>
         </mat-expansion-panel>
 
-        <div class="feeding-suggestion-banner">
+        <div class="feeding-suggestion-banner" [class.overdue]="feedingSuggestion().isOverdue">
           <mat-icon>eco</mat-icon>
-          <span>
-            Sugestão de hoje (rodízio de fertirrigação): <strong>{{ feedingInputLabel(suggestedInputType()) }}</strong>
-          </span>
+          <span>{{ feedingSuggestionLabel(feedingSuggestion()) }}</span>
         </div>
 
         <div class="bulk-watering-toolbar">
@@ -94,7 +92,7 @@
                   <mat-select formControlName="input_type">
                     @for (t of feedingInputTypes; track t.value) {
                       <mat-option [value]="t.value">
-                        {{ t.label }}{{ t.value === suggestedInputType() ? ' (sugerido)' : '' }}
+                        {{ t.label }}{{ t.value === feedingSuggestion().nextInputType ? ' (sugerido)' : '' }}
                       </mat-option>
                     }
                   </mat-select>
@@ -221,7 +219,7 @@
                     <mat-select formControlName="input_type">
                       @for (t of feedingInputTypes; track t.value) {
                         <mat-option [value]="t.value">
-                          {{ t.label }}{{ t.value === suggestedInputType() ? ' (sugerido)' : '' }}
+                          {{ t.label }}{{ t.value === feedingSuggestion().nextInputType ? ' (sugerido)' : '' }}
                         </mat-option>
                       }
                     </mat-select>

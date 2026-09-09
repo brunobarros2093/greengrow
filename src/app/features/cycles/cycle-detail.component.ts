@@ -30,7 +30,9 @@ import {
   FEEDING_INPUT_TYPES,
   feedingInputLabel,
   derivedWateringType,
-  suggestNextFeedingInput,
+  computeFeedingSuggestion,
+  feedingSuggestionLabel,
+  FeedingSuggestion,
   computeWateringStatus,
   wateringStatusLabelFor,
   computePlantAge,
@@ -85,7 +87,7 @@ export class CycleDetailComponent implements OnInit {
   readonly trainingTechniques = TRAINING_TECHNIQUES;
   readonly journalTypes = JOURNAL_ENTRY_TYPES;
   readonly feedingInputTypes = FEEDING_INPUT_TYPES;
-  readonly suggestedInputType = signal<string>(FEEDING_INPUT_TYPES[0].value);
+  readonly feedingSuggestion = signal<FeedingSuggestion>(computeFeedingSuggestion(null));
   readonly transplantStages = signal<TransplantStage[]>(buildTransplantStages());
 
   growId = '';
@@ -173,14 +175,15 @@ export class CycleDetailComponent implements OnInit {
   }
 
   async reloadFeedingSuggestion(): Promise<void> {
-    const lastInputType = await this.electron.api.waterings.getLastCycleInputType(this.cycleId);
-    const suggestion = suggestNextFeedingInput(lastInputType);
-    this.suggestedInputType.set(suggestion);
-    this.wateringForm.patchValue({ input_type: suggestion });
-    this.bulkWateringForm.patchValue({ input_type: suggestion });
+    const lastFeeding = await this.electron.api.waterings.getLastCycleFeeding(this.cycleId);
+    const suggestion = computeFeedingSuggestion(lastFeeding);
+    this.feedingSuggestion.set(suggestion);
+    this.wateringForm.patchValue({ input_type: suggestion.nextInputType });
+    this.bulkWateringForm.patchValue({ input_type: suggestion.nextInputType });
   }
 
   readonly feedingInputLabel = feedingInputLabel;
+  readonly feedingSuggestionLabel = feedingSuggestionLabel;
 
   async reloadLastWaterings(): Promise<void> {
     const plantIds = this.plants().map((p) => p.id);
@@ -315,7 +318,7 @@ export class CycleDetailComponent implements OnInit {
       plant_id: plantId,
       cycle_id: this.cycleId,
     });
-    this.wateringForm.reset({ date: new Date().toISOString().slice(0, 10), input_type: this.suggestedInputType(), volume_ml: null, nutrients_used: '', notes: '' });
+    this.wateringForm.reset({ date: new Date().toISOString().slice(0, 10), input_type: this.feedingSuggestion().nextInputType, volume_ml: null, nutrients_used: '', notes: '' });
     const waterings = await this.electron.api.waterings.listByPlant(plantId);
     this.wateringsByPlant.update((m) => ({ ...m, [plantId]: waterings }));
     await this.reloadLastWaterings();
@@ -377,7 +380,7 @@ export class CycleDetailComponent implements OnInit {
         type: derivedWateringType(input_type!),
         cycle_id: this.cycleId,
       });
-      this.bulkWateringForm.reset({ date: new Date().toISOString().slice(0, 10), input_type: this.suggestedInputType(), volume_ml: null, nutrients_used: '', notes: '' });
+      this.bulkWateringForm.reset({ date: new Date().toISOString().slice(0, 10), input_type: this.feedingSuggestion().nextInputType, volume_ml: null, nutrients_used: '', notes: '' });
       this.selectedPlantIds.set(new Set());
       this.bulkWateringMode.set(false);
       await this.reloadLastWaterings();
