@@ -1,6 +1,6 @@
 {
   "name": "app",
-  "version": "0.0.0",
+  "version": "1.0.1",
   "private": true,
   "main": "dist-electron/main.js",
   "scripts": {
@@ -13,6 +13,7 @@
     "electron:start": "electron .",
     "dev": "concurrently -k -n ANGULAR,ELECTRON -c blue,green \"ng serve\" \"npm:electron:dev\"",
     "electron:dev": "npm run electron:build && wait-on tcp:4200 && cross-env NODE_ENV=development electron .",
+    "predist": "npm version patch --no-git-tag-version",
     "dist": "npm run build && npm run electron:build && electron-builder"
   },
   "packageManager": "npm@11.19.0",
