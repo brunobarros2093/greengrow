@@ -327,6 +327,8 @@ export interface Watering {
   nutrients_used: string | null;
   volume_ml: number | null;
   notes: string | null;
+  input_item_id: string | null;
+  input_item_amount_ml: number | null;
   created_at: string;
 }
 

@@ -145,6 +145,8 @@ CREATE TABLE IF NOT EXISTS waterings (
   nutrients_used TEXT,
   volume_ml REAL,
   notes TEXT,
+  input_item_id TEXT REFERENCES input_items(id) ON DELETE SET NULL, -- insumo do estoque usado nesta rega, se houver
+  input_item_amount_ml REAL, -- quantidade (mL) descontada do estoque do insumo acima
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
@@ -167,4 +169,6 @@ export const MIGRATIONS_SQL: string[] = [
   'ALTER TABLE plants ADD COLUMN planted_at TEXT',
   `UPDATE plants SET planted_at = (SELECT start_date FROM cycles WHERE cycles.id = plants.cycle_id) WHERE planted_at IS NULL`,
   'ALTER TABLE plants ADD COLUMN is_final_pot INTEGER NOT NULL DEFAULT 0',
+  'ALTER TABLE waterings ADD COLUMN input_item_id TEXT REFERENCES input_items(id) ON DELETE SET NULL',
+  'ALTER TABLE waterings ADD COLUMN input_item_amount_ml REAL',
 ];

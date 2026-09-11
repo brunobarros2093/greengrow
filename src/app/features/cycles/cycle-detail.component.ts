@@ -41,6 +41,7 @@ import {
   buildTransplantStages,
   computeTransplantSuggestion,
   transplantSuggestionLabel,
+  InputItem,
 } from '../../core/models';
 
 type JournalPhotoWithData = JournalPhoto & { dataUrl: string };
@@ -81,6 +82,7 @@ export class CycleDetailComponent implements OnInit {
   readonly lastWateringByPlant = signal<Record<string, Watering | null>>({});
   readonly transplantsByPlant = signal<Record<string, PlantTransplant[]>>({});
   readonly lastTransplantByPlant = signal<Record<string, PlantTransplant | null>>({});
+  readonly stockItems = signal<InputItem[]>([]);
 
   readonly stages = CYCLE_STAGES;
   readonly seedTypes = SEED_TYPES;
@@ -127,6 +129,8 @@ export class CycleDetailComponent implements OnInit {
     volume_ml: [null as number | null],
     nutrients_used: [''],
     notes: [''],
+    input_item_id: [null as string | null],
+    input_item_amount_ml: [null as number | null],
   });
 
   bulkWateringForm = this.fb.group({
@@ -135,6 +139,8 @@ export class CycleDetailComponent implements OnInit {
     volume_ml: [null as number | null],
     nutrients_used: [''],
     notes: [''],
+    input_item_id: [null as string | null],
+    input_item_amount_ml: [null as number | null],
   });
 
   transplantForm = this.fb.group({
@@ -149,6 +155,11 @@ export class CycleDetailComponent implements OnInit {
     this.cycleId = this.route.snapshot.paramMap.get('cycleId')!;
     this.loadPotSizes();
     this.reload();
+    this.reloadStockItems();
+  }
+
+  async reloadStockItems(): Promise<void> {
+    this.stockItems.set(await this.electron.api.inputs.list());
   }
 
   async loadPotSizes(): Promise<void> {
@@ -310,19 +321,30 @@ export class CycleDetailComponent implements OnInit {
 
   async addWatering(plantId: string): Promise<void> {
     if (this.wateringForm.invalid) return;
-    const { input_type, ...rest } = this.wateringForm.getRawValue();
+    const { input_type, input_item_id, input_item_amount_ml, ...rest } = this.wateringForm.getRawValue();
     await this.electron.api.waterings.create({
       ...rest,
       input_type,
       type: derivedWateringType(input_type!),
       plant_id: plantId,
       cycle_id: this.cycleId,
+      input_item_id: input_item_id ?? null,
+      input_item_amount_ml: input_item_id ? input_item_amount_ml : null,
     });
-    this.wateringForm.reset({ date: new Date().toISOString().slice(0, 10), input_type: this.feedingSuggestion().nextInputType, volume_ml: null, nutrients_used: '', notes: '' });
+    this.wateringForm.reset({
+      date: new Date().toISOString().slice(0, 10),
+      input_type: this.feedingSuggestion().nextInputType,
+      volume_ml: null,
+      nutrients_used: '',
+      notes: '',
+      input_item_id: null,
+      input_item_amount_ml: null,
+    });
     const waterings = await this.electron.api.waterings.listByPlant(plantId);
     this.wateringsByPlant.update((m) => ({ ...m, [plantId]: waterings }));
     await this.reloadLastWaterings();
     await this.reloadFeedingSuggestion();
+    if (input_item_id) await this.reloadStockItems();
   }
 
   async removeWatering(plantId: string, wateringId: string): Promise<void> {
@@ -331,6 +353,16 @@ export class CycleDetailComponent implements OnInit {
     this.wateringsByPlant.update((m) => ({ ...m, [plantId]: waterings }));
     await this.reloadLastWaterings();
     await this.reloadFeedingSuggestion();
+    await this.reloadStockItems();
+  }
+
+  onInsumoSelectChange(form: 'watering' | 'bulk', itemId: string | null): void {
+    const target = form === 'watering' ? this.wateringForm : this.bulkWateringForm;
+    if (!itemId) target.patchValue({ input_item_amount_ml: null });
+  }
+
+  stockItemName(id: string): string {
+    return this.stockItems().find((i) => i.id === id)?.name ?? 'Insumo removido';
   }
 
   daysSinceLastWatering(plantId: string): number | null {
@@ -373,18 +405,29 @@ export class CycleDetailComponent implements OnInit {
     this.bulkBusy = true;
     try {
       const plantIds = Array.from(this.selectedPlantIds());
-      const { input_type, ...rest } = this.bulkWateringForm.getRawValue();
+      const { input_type, input_item_id, input_item_amount_ml, ...rest } = this.bulkWateringForm.getRawValue();
       await this.electron.api.waterings.createBulk(plantIds, {
         ...rest,
         input_type,
         type: derivedWateringType(input_type!),
         cycle_id: this.cycleId,
+        input_item_id: input_item_id ?? null,
+        input_item_amount_ml: input_item_id ? input_item_amount_ml : null,
       });
-      this.bulkWateringForm.reset({ date: new Date().toISOString().slice(0, 10), input_type: this.feedingSuggestion().nextInputType, volume_ml: null, nutrients_used: '', notes: '' });
+      this.bulkWateringForm.reset({
+        date: new Date().toISOString().slice(0, 10),
+        input_type: this.feedingSuggestion().nextInputType,
+        volume_ml: null,
+        nutrients_used: '',
+        notes: '',
+        input_item_id: null,
+        input_item_amount_ml: null,
+      });
       this.selectedPlantIds.set(new Set());
       this.bulkWateringMode.set(false);
       await this.reloadLastWaterings();
       await this.reloadFeedingSuggestion();
+      if (input_item_id) await this.reloadStockItems();
       if (this.expandedPlantId) {
         const waterings = await this.electron.api.waterings.listByPlant(this.expandedPlantId);
         this.wateringsByPlant.update((m) => ({ ...m, [this.expandedPlantId as string]: waterings }));

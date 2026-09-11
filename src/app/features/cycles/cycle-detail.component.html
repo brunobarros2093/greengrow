@@ -102,6 +102,24 @@
                   <input matInput type="number" formControlName="volume_ml" />
                 </mat-form-field>
                 <mat-form-field appearance="outline">
+                  <mat-label>Insumo do estoque (opcional)</mat-label>
+                  <mat-select
+                    formControlName="input_item_id"
+                    (selectionChange)="onInsumoSelectChange('bulk', $event.value)"
+                  >
+                    <mat-option [value]="null">Nenhum — não descontar do estoque</mat-option>
+                    @for (item of stockItems(); track item.id) {
+                      <mat-option [value]="item.id">{{ item.name }} ({{ item.quantity }}{{ item.unit }} em estoque)</mat-option>
+                    }
+                  </mat-select>
+                </mat-form-field>
+                @if (bulkWateringForm.value.input_item_id) {
+                  <mat-form-field appearance="outline">
+                    <mat-label>Quantidade usada por planta (mL)</mat-label>
+                    <input matInput type="number" formControlName="input_item_amount_ml" />
+                  </mat-form-field>
+                }
+                <mat-form-field appearance="outline">
                   <mat-label>Diluição / detalhes (opcional)</mat-label>
                   <input matInput formControlName="nutrients_used" placeholder="Ex: 5mL/L" />
                 </mat-form-field>
@@ -229,6 +247,24 @@
                     <input matInput type="number" formControlName="volume_ml" />
                   </mat-form-field>
                   <mat-form-field appearance="outline">
+                    <mat-label>Insumo do estoque (opcional)</mat-label>
+                    <mat-select
+                      formControlName="input_item_id"
+                      (selectionChange)="onInsumoSelectChange('watering', $event.value)"
+                    >
+                      <mat-option [value]="null">Nenhum — não descontar do estoque</mat-option>
+                      @for (item of stockItems(); track item.id) {
+                        <mat-option [value]="item.id">{{ item.name }} ({{ item.quantity }}{{ item.unit }} em estoque)</mat-option>
+                      }
+                    </mat-select>
+                  </mat-form-field>
+                  @if (wateringForm.value.input_item_id) {
+                    <mat-form-field appearance="outline">
+                      <mat-label>Quantidade usada (mL)</mat-label>
+                      <input matInput type="number" formControlName="input_item_amount_ml" />
+                    </mat-form-field>
+                  }
+                  <mat-form-field appearance="outline">
                     <mat-label>Diluição / detalhes (opcional)</mat-label>
                     <input matInput formControlName="nutrients_used" placeholder="Ex: 5mL/L" />
                   </mat-form-field>
@@ -246,6 +282,9 @@
                     <li>
                       <strong>{{ feedingInputLabel(w.input_type) }}</strong> — {{ w.date }}
                       @if (w.volume_ml) { <span> · {{ w.volume_ml }}mL</span> }
+                      @if (w.input_item_id && w.input_item_amount_ml) {
+                        <span> · {{ stockItemName(w.input_item_id) }}: {{ w.input_item_amount_ml }}mL do estoque</span>
+                      }
                       @if (w.nutrients_used) { <span> · {{ w.nutrients_used }}</span> }
                       @if (w.notes) { <span> · {{ w.notes }}</span> }
                       <button mat-icon-button (click)="removeWatering(plant.id, w.id)">

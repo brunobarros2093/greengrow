@@ -379,6 +379,13 @@ export const InputItemsRepo = {
     if (!current) throw new Error('Input item not found');
     return this.update(id, { quantity: current.quantity + delta });
   },
+  /** Aplica um delta informado em mL, convertendo para a unidade de estoque do item (L, mL, kg, g, un). */
+  adjustQuantityByMl(id: string, deltaMl: number): InputItem {
+    const current = this.get(id);
+    if (!current) throw new Error('Input item not found');
+    const delta = current.unit === 'L' ? deltaMl / 1000 : deltaMl;
+    return this.adjustQuantity(id, delta);
+  },
   remove(id: string): void {
     getDb().prepare('DELETE FROM input_items WHERE id = ?').run(id);
   },
@@ -460,6 +467,8 @@ export interface Watering {
   nutrients_used: string | null;
   volume_ml: number | null;
   notes: string | null;
+  input_item_id: string | null;
+  input_item_amount_ml: number | null;
   created_at: string;
 }
 
@@ -504,17 +513,33 @@ export const WateringsRepo = {
     const ts = now();
     getDb()
       .prepare(
-        `INSERT INTO waterings (id, plant_id, cycle_id, date, type, input_type, nutrients_used, volume_ml, notes, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        `INSERT INTO waterings (id, plant_id, cycle_id, date, type, input_type, nutrients_used, volume_ml, notes, input_item_id, input_item_amount_ml, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
       )
-      .run(id, input.plant_id, input.cycle_id, input.date, input.type, input.input_type, input.nutrients_used, input.volume_ml, input.notes, ts);
+      .run(
+        id,
+        input.plant_id,
+        input.cycle_id,
+        input.date,
+        input.type,
+        input.input_type,
+        input.nutrients_used,
+        input.volume_ml,
+        input.notes,
+        input.input_item_id ?? null,
+        input.input_item_amount_ml ?? null,
+        ts
+      );
+    if (input.input_item_id && input.input_item_amount_ml) {
+      InputItemsRepo.adjustQuantityByMl(input.input_item_id, -input.input_item_amount_ml);
+    }
     return getDb().prepare('SELECT * FROM waterings WHERE id = ?').get(id) as unknown as Watering;
   },
   createBulk(plantIds: string[], shared: Omit<Watering, 'id' | 'created_at' | 'plant_id'>): Watering[] {
     const db = getDb();
     const stmt = db.prepare(
-      `INSERT INTO waterings (id, plant_id, cycle_id, date, type, input_type, nutrients_used, volume_ml, notes, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      `INSERT INTO waterings (id, plant_id, cycle_id, date, type, input_type, nutrients_used, volume_ml, notes, input_item_id, input_item_amount_ml, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     );
     const ts = now();
     const ids: string[] = [];
@@ -533,8 +558,13 @@ export const WateringsRepo = {
           shared.nutrients_used,
           shared.volume_ml,
           shared.notes,
+          shared.input_item_id ?? null,
+          shared.input_item_amount_ml ?? null,
           ts
         );
+      }
+      if (shared.input_item_id && shared.input_item_amount_ml) {
+        InputItemsRepo.adjustQuantityByMl(shared.input_item_id, -shared.input_item_amount_ml * plantIds.length);
       }
       db.exec('COMMIT');
     } catch (err) {
@@ -545,7 +575,12 @@ export const WateringsRepo = {
     return db.prepare(`SELECT * FROM waterings WHERE id IN (${placeholders})`).all(...ids) as unknown as Watering[];
   },
   remove(id: string): void {
-    getDb().prepare('DELETE FROM waterings WHERE id = ?').run(id);
+    const db = getDb();
+    const watering = db.prepare('SELECT * FROM waterings WHERE id = ?').get(id) as unknown as Watering | undefined;
+    if (watering?.input_item_id && watering.input_item_amount_ml) {
+      InputItemsRepo.adjustQuantityByMl(watering.input_item_id, watering.input_item_amount_ml);
+    }
+    db.prepare('DELETE FROM waterings WHERE id = ?').run(id);
   },
 };
 
