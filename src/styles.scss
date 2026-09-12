@@ -361,3 +361,31 @@ mat-card.form-panel {
 .plant-card-selected {
   outline: 2px solid var(--mat-sys-primary);
 }
+
+@media print {
+  .no-print {
+    display: none !important;
+  }
+
+  .app-sidenav,
+  .app-toolbar {
+    display: none !important;
+  }
+
+  mat-sidenav-container.app-shell,
+  mat-sidenav-content,
+  .app-content {
+    position: static !important;
+    display: block !important;
+    height: auto !important;
+    min-height: 0 !important;
+    overflow: visible !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  @page {
+    size: A4;
+    margin: 10mm;
+  }
+}

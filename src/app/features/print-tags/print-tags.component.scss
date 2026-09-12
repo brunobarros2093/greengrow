@@ -1,0 +1,62 @@
+.print-tags-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.print-tags-picklist {
+  list-style: none;
+  padding: 0;
+  margin: 16px 0 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 4px 16px;
+}
+
+// Grid de etiquetas: tamanho fixo (7cm x 3.5cm) com guia de corte tracejada.
+.tag-sheet {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, 70mm);
+  gap: 4mm;
+  justify-content: start;
+  margin-top: 16px;
+}
+
+.tag-card {
+  width: 70mm;
+  height: 35mm;
+  box-sizing: border-box;
+  border: 1px dashed #999;
+  border-radius: 2mm;
+  padding: 4mm;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 2mm;
+  break-inside: avoid;
+  page-break-inside: avoid;
+  background: #fff;
+}
+
+.tag-id {
+  font-size: 20pt;
+  font-weight: 700;
+  line-height: 1.1;
+  overflow-wrap: break-word;
+}
+
+.tag-strain {
+  font-size: 12pt;
+  color: #444;
+  overflow-wrap: break-word;
+}
+
+.tag-date {
+  font-size: 9pt;
+  color: #666;
+}
+
+@media screen {
+  .tag-card {
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.12);
+  }
+}

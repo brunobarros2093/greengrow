@@ -66,6 +66,10 @@
             <mat-icon>water_drop</mat-icon>
             {{ bulkWateringMode() ? 'Cancelar Rega em Lote' : 'Regar em Lote' }}
           </button>
+          <button mat-stroked-button [routerLink]="['/grows', growId, 'cycles', cycleId, 'print-tags']">
+            <mat-icon>print</mat-icon>
+            Imprimir Tags
+          </button>
           @if (bulkWateringMode()) {
             <button mat-button (click)="toggleSelectAllPlants()">
               <mat-icon>done_all</mat-icon>

@@ -1,0 +1,48 @@
+@if (cycle(); as c) {
+  <div class="no-print">
+    <p class="breadcrumb">
+      <a [routerLink]="['/grows']">Grows</a> /
+      <a [routerLink]="['/grows', growId]">Grow</a> /
+      <a [routerLink]="['/grows', growId, 'cycles', cycleId]">{{ c.name }}</a> /
+      Imprimir Tags
+    </p>
+    <div class="page-header">
+      <h1>Imprimir Tags — {{ c.name }}</h1>
+      <div class="print-tags-actions">
+        <button mat-button (click)="toggleSelectAll()">
+          <mat-icon>done_all</mat-icon>
+          {{ allSelected() ? 'Desmarcar Todas' : 'Selecionar Todas' }}
+        </button>
+        <button mat-flat-button color="primary" [disabled]="selectedPlants().length === 0" (click)="print()">
+          <mat-icon>print</mat-icon> Imprimir ({{ selectedPlants().length }})
+        </button>
+      </div>
+    </div>
+
+    <ul class="print-tags-picklist">
+      @for (p of plants(); track p.id) {
+        <li>
+          <mat-checkbox [checked]="isSelected(p.id)" (change)="toggle(p.id)">
+            {{ p.tag }}@if (p.strain) { — {{ p.strain }} }
+          </mat-checkbox>
+        </li>
+      } @empty {
+        <p>Nenhuma planta cadastrada neste ciclo.</p>
+      }
+    </ul>
+  </div>
+
+  <div class="tag-sheet">
+    @for (p of selectedPlants(); track p.id) {
+      <div class="tag-card">
+        <div class="tag-id">{{ p.tag }}</div>
+        @if (p.strain) {
+          <div class="tag-strain">{{ p.strain }}</div>
+        }
+        <div class="tag-date">Início: {{ formatDate(p.planted_at) }}</div>
+      </div>
+    } @empty {
+      <p class="no-print">Selecione ao menos uma planta acima para gerar as etiquetas.</p>
+    }
+  </div>
+}

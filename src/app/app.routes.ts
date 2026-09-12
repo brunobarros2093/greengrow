@@ -15,6 +15,10 @@ export const routes: Routes = [
     loadComponent: () => import('./features/cycles/cycle-detail.component').then((m) => m.CycleDetailComponent),
   },
   {
+    path: 'grows/:growId/cycles/:cycleId/print-tags',
+    loadComponent: () => import('./features/print-tags/print-tags.component').then((m) => m.PrintTagsComponent),
+  },
+  {
     path: 'vault',
     loadComponent: () => import('./features/vault/vault.component').then((m) => m.VaultComponent),
   },
