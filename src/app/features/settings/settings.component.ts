@@ -7,7 +7,7 @@ import { MatIconModule } from '@angular/material/icon';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 import { ElectronService } from '../../core/electron.service';
-import { DEFAULT_POT_SIZES } from '../../core/models';
+import { DEFAULT_POT_SIZES, DEFAULT_FLOWER_SETTINGS } from '../../core/models';
 
 @Component({
   selector: 'app-settings',
@@ -32,9 +32,34 @@ export class SettingsComponent implements OnInit {
     final_liters: [DEFAULT_POT_SIZES.final_liters, [Validators.required, Validators.min(0.1)]],
   });
 
+  flowerSettingsBusy = false;
+  flowerSettingsMessage = '';
+
+  flowerSettingsForm = this.fb.group({
+    auto_flower_veg_days: [DEFAULT_FLOWER_SETTINGS.auto_flower_veg_days, [Validators.required, Validators.min(1)]],
+  });
+
   ngOnInit(): void {
     this.loadPath();
     this.loadPotSizes();
+    this.loadFlowerSettings();
+  }
+
+  async loadFlowerSettings(): Promise<void> {
+    const settings = await this.electron.api.settings.getFlowerSettings();
+    this.flowerSettingsForm.setValue(settings);
+  }
+
+  async saveFlowerSettings(): Promise<void> {
+    if (this.flowerSettingsForm.invalid) return;
+    this.flowerSettingsBusy = true;
+    this.flowerSettingsMessage = '';
+    try {
+      await this.electron.api.settings.setFlowerSettings(this.flowerSettingsForm.getRawValue());
+      this.flowerSettingsMessage = 'Configuração de floração automática salva com sucesso.';
+    } finally {
+      this.flowerSettingsBusy = false;
+    }
   }
 
   async loadPotSizes(): Promise<void> {

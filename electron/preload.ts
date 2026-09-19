@@ -11,6 +11,8 @@ const api = {
   settings: {
     getPotSizes: () => invoke('settings:getPotSizes'),
     setPotSizes: (sizes: any) => invoke('settings:setPotSizes', sizes),
+    getFlowerSettings: () => invoke('settings:getFlowerSettings'),
+    setFlowerSettings: (settings: any) => invoke('settings:setFlowerSettings', settings),
   },
   grows: {
     list: () => invoke('grows:list'),
@@ -90,6 +92,22 @@ const api = {
     create: (input: any) => invoke('waterings:create', input),
     createBulk: (plantIds: string[], shared: any) => invoke('waterings:createBulk', plantIds, shared),
     remove: (id: string) => invoke('waterings:remove', id),
+    getPartsForWatering: (wateringId: string) => invoke('waterings:getPartsForWatering', wateringId),
+    createMineralFeeding: (input: any) => invoke('waterings:createMineralFeeding', input),
+    createMineralFeedingBulk: (plantIds: string[], shared: any) => invoke('waterings:createMineralFeedingBulk', plantIds, shared),
+  },
+  feedingProfiles: {
+    list: () => invoke('feedingProfiles:list'),
+    get: (id: string) => invoke('feedingProfiles:get', id),
+    create: (input: any) => invoke('feedingProfiles:create', input),
+    update: (id: string, input: any) => invoke('feedingProfiles:update', id, input),
+    remove: (id: string) => invoke('feedingProfiles:remove', id),
+    listStagesWithParts: (profileId: string) => invoke('feedingProfiles:listStagesWithParts', profileId),
+    addStage: (input: any) => invoke('feedingProfiles:addStage', input),
+    removeStage: (id: string) => invoke('feedingProfiles:removeStage', id),
+    addPart: (input: any) => invoke('feedingProfiles:addPart', input),
+    removePart: (id: string) => invoke('feedingProfiles:removePart', id),
+    seedEasyCocoDefault: () => invoke('feedingProfiles:seedEasyCocoDefault'),
   },
   backup: {
     getPath: () => invoke('backup:getPath'),

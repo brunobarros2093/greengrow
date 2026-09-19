@@ -35,6 +35,31 @@
 
 <mat-card class="form-panel">
   <mat-card-header>
+    <mat-card-title>Floração Automática (Autoflorescentes)</mat-card-title>
+    <mat-card-subtitle>
+      Após quantos dias de vegetativo o flip para floração deve ser considerado automático para plantas autoflorescentes.
+    </mat-card-subtitle>
+  </mat-card-header>
+  <mat-card-content>
+    <form [formGroup]="flowerSettingsForm" (ngSubmit)="saveFlowerSettings()" class="grid-form">
+      <mat-form-field appearance="outline">
+        <mat-label>Dias de vegetativo até o flip automático</mat-label>
+        <input matInput type="number" step="1" formControlName="auto_flower_veg_days" />
+      </mat-form-field>
+      <div class="form-actions">
+        <button mat-flat-button color="primary" type="submit" [disabled]="flowerSettingsForm.invalid || flowerSettingsBusy">
+          Salvar
+        </button>
+      </div>
+    </form>
+    @if (flowerSettingsMessage) {
+      <p>{{ flowerSettingsMessage }}</p>
+    }
+  </mat-card-content>
+</mat-card>
+
+<mat-card class="form-panel">
+  <mat-card-header>
     <mat-card-title>Backup e Restauração do Banco de Dados</mat-card-title>
     <mat-card-subtitle>Arquivo atual: {{ dbPath() || '—' }}</mat-card-subtitle>
   </mat-card-header>

@@ -14,6 +14,7 @@ import {
   JournalRepo,
   WateringsRepo,
   SettingsRepo,
+  FeedingProfilesRepo,
 } from '../db/repositories';
 
 function handle(channel: string, fn: (...args: any[]) => any) {
@@ -30,6 +31,8 @@ export function registerIpcHandlers(): void {
   // App Settings
   handle('settings:getPotSizes', () => SettingsRepo.getPotSizes());
   handle('settings:setPotSizes', (sizes: any) => SettingsRepo.setPotSizes(sizes));
+  handle('settings:getFlowerSettings', () => SettingsRepo.getFlowerSettings());
+  handle('settings:setFlowerSettings', (settings: any) => SettingsRepo.setFlowerSettings(settings));
 
   // Grows
   handle('grows:list', () => GrowsRepo.list());
@@ -162,6 +165,24 @@ export function registerIpcHandlers(): void {
   handle('waterings:create', (input: any) => WateringsRepo.create(input));
   handle('waterings:createBulk', (plantIds: string[], shared: any) => WateringsRepo.createBulk(plantIds, shared));
   handle('waterings:remove', (id: string) => WateringsRepo.remove(id));
+  handle('waterings:getPartsForWatering', (wateringId: string) => WateringsRepo.getPartsForWatering(wateringId));
+  handle('waterings:createMineralFeeding', (input: any) => WateringsRepo.createMineralFeeding(input));
+  handle('waterings:createMineralFeedingBulk', (plantIds: string[], shared: any) =>
+    WateringsRepo.createMineralFeedingBulk(plantIds, shared)
+  );
+
+  // Feeding Profiles (perfis de alimentação mineral/organomineral)
+  handle('feedingProfiles:list', () => FeedingProfilesRepo.list());
+  handle('feedingProfiles:get', (id: string) => FeedingProfilesRepo.get(id));
+  handle('feedingProfiles:create', (input: any) => FeedingProfilesRepo.create(input));
+  handle('feedingProfiles:update', (id: string, input: any) => FeedingProfilesRepo.update(id, input));
+  handle('feedingProfiles:remove', (id: string) => FeedingProfilesRepo.remove(id));
+  handle('feedingProfiles:listStagesWithParts', (profileId: string) => FeedingProfilesRepo.listStagesWithParts(profileId));
+  handle('feedingProfiles:addStage', (input: any) => FeedingProfilesRepo.addStage(input));
+  handle('feedingProfiles:removeStage', (id: string) => FeedingProfilesRepo.removeStage(id));
+  handle('feedingProfiles:addPart', (input: any) => FeedingProfilesRepo.addPart(input));
+  handle('feedingProfiles:removePart', (id: string) => FeedingProfilesRepo.removePart(id));
+  handle('feedingProfiles:seedEasyCocoDefault', () => FeedingProfilesRepo.seedEasyCocoDefault());
 
   // Backup & Restore
   handle('backup:getPath', () => getDbPath());

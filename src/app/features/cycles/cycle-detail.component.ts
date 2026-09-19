@@ -14,6 +14,7 @@ import { MatChipsModule } from '@angular/material/chips';
 import { MatDividerModule } from '@angular/material/divider';
 import { MatCheckboxModule } from '@angular/material/checkbox';
 import { MatSlideToggleModule } from '@angular/material/slide-toggle';
+import { MatButtonToggleModule } from '@angular/material/button-toggle';
 import { ElectronService } from '../../core/electron.service';
 import {
   Cycle,
@@ -35,13 +36,23 @@ import {
   FeedingSuggestion,
   computeWateringStatus,
   wateringStatusLabelFor,
-  computePlantAge,
   PlantTransplant,
   TransplantStage,
   buildTransplantStages,
   computeTransplantSuggestion,
   transplantSuggestionLabel,
   InputItem,
+  FlowerSettings,
+  DEFAULT_FLOWER_SETTINGS,
+  GrowthPhaseInfo,
+  computeGrowthPhase,
+  growthPhaseLabel,
+  FeedingProfile,
+  FeedingProfileStageWithParts,
+  WateringPart,
+  ComputedPartAmount,
+  computePartAmounts,
+  formatStageWeeks,
 } from '../../core/models';
 
 type JournalPhotoWithData = JournalPhoto & { dataUrl: string };
@@ -65,6 +76,7 @@ type JournalPhotoWithData = JournalPhoto & { dataUrl: string };
     MatDividerModule,
     MatCheckboxModule,
     MatSlideToggleModule,
+    MatButtonToggleModule,
   ],
   templateUrl: './cycle-detail.component.html',
 })
@@ -83,6 +95,13 @@ export class CycleDetailComponent implements OnInit {
   readonly transplantsByPlant = signal<Record<string, PlantTransplant[]>>({});
   readonly lastTransplantByPlant = signal<Record<string, PlantTransplant | null>>({});
   readonly stockItems = signal<InputItem[]>([]);
+  readonly partsByWateringId = signal<Record<string, WateringPart[]>>({});
+  readonly feedingProfiles = signal<FeedingProfile[]>([]);
+  readonly feedingMethod = signal<'organico' | 'mineral'>('organico');
+  readonly bulkFeedingMethod = signal<'organico' | 'mineral'>('organico');
+  readonly mineralStages = signal<FeedingProfileStageWithParts[]>([]);
+  readonly bulkMineralStages = signal<FeedingProfileStageWithParts[]>([]);
+  readonly formatStageWeeks = formatStageWeeks;
 
   readonly stages = CYCLE_STAGES;
   readonly seedTypes = SEED_TYPES;
@@ -91,6 +110,7 @@ export class CycleDetailComponent implements OnInit {
   readonly feedingInputTypes = FEEDING_INPUT_TYPES;
   readonly feedingSuggestion = signal<FeedingSuggestion>(computeFeedingSuggestion(null));
   readonly transplantStages = signal<TransplantStage[]>(buildTransplantStages());
+  readonly flowerSettings = signal<FlowerSettings>(DEFAULT_FLOWER_SETTINGS);
 
   growId = '';
   cycleId = '';
@@ -107,6 +127,7 @@ export class CycleDetailComponent implements OnInit {
     pot_liters: [null as number | null],
     substrate: ['Super Solo Orgânico'],
     planted_at: [new Date().toISOString().slice(0, 10), Validators.required],
+    quantity: [1, [Validators.required, Validators.min(1)]],
   });
 
   trainingForm = this.fb.group({
@@ -143,6 +164,22 @@ export class CycleDetailComponent implements OnInit {
     input_item_amount_ml: [null as number | null],
   });
 
+  mineralWateringForm = this.fb.group({
+    date: [new Date().toISOString().slice(0, 10), Validators.required],
+    profile_id: [null as string | null, Validators.required],
+    stage_id: [null as string | null, Validators.required],
+    volume_ml: [null as number | null, Validators.required],
+    notes: [''],
+  });
+
+  bulkMineralWateringForm = this.fb.group({
+    date: [new Date().toISOString().slice(0, 10), Validators.required],
+    profile_id: [null as string | null, Validators.required],
+    stage_id: [null as string | null, Validators.required],
+    volume_ml: [null as number | null, Validators.required],
+    notes: [''],
+  });
+
   transplantForm = this.fb.group({
     date: [new Date().toISOString().slice(0, 10), Validators.required],
     pot_liters: [null as number | null, Validators.required],
@@ -150,12 +187,22 @@ export class CycleDetailComponent implements OnInit {
     notes: [''],
   });
 
+  flipForm = this.fb.group({
+    flip_date: [new Date().toISOString().slice(0, 10), Validators.required],
+  });
+
   ngOnInit(): void {
     this.growId = this.route.snapshot.paramMap.get('growId')!;
     this.cycleId = this.route.snapshot.paramMap.get('cycleId')!;
     this.loadPotSizes();
+    this.loadFlowerSettings();
     this.reload();
     this.reloadStockItems();
+    this.loadFeedingProfiles();
+  }
+
+  async loadFeedingProfiles(): Promise<void> {
+    this.feedingProfiles.set(await this.electron.api.feedingProfiles.list());
   }
 
   async reloadStockItems(): Promise<void> {
@@ -167,6 +214,10 @@ export class CycleDetailComponent implements OnInit {
     this.transplantStages.set(buildTransplantStages(sizes));
   }
 
+  async loadFlowerSettings(): Promise<void> {
+    this.flowerSettings.set(await this.electron.api.settings.getFlowerSettings());
+  }
+
   async reload(): Promise<void> {
     this.cycle.set(await this.electron.api.cycles.get(this.cycleId));
     this.plants.set(await this.electron.api.plants.listByCycle(this.cycleId));
@@ -174,6 +225,24 @@ export class CycleDetailComponent implements OnInit {
     await this.reloadLastWaterings();
     await this.reloadFeedingSuggestion();
     await this.reloadLastTransplants();
+    await this.persistDueAutoFlips();
+  }
+
+  /** Autoflorescentes: uma vez atingido o dia configurado de vegetativo, grava o flip_date automaticamente. */
+  async persistDueAutoFlips(): Promise<void> {
+    const settings = this.flowerSettings();
+    let anyFlipped = false;
+    for (const plant of this.plants()) {
+      if (plant.flip_date || plant.seed_type !== 'autoflorescente') continue;
+      const phase = computeGrowthPhase(plant, settings);
+      if (phase?.phase === 'floracao' && phase.flipDate) {
+        await this.electron.api.plants.update(plant.id, { flip_date: phase.flipDate });
+        anyFlipped = true;
+      }
+    }
+    if (anyFlipped) {
+      this.plants.set(await this.electron.api.plants.listByCycle(this.cycleId));
+    }
   }
 
   async reloadLastTransplants(): Promise<void> {
@@ -215,7 +284,15 @@ export class CycleDetailComponent implements OnInit {
 
   async addPlant(): Promise<void> {
     if (this.plantForm.invalid) return;
-    await this.electron.api.plants.create({ ...this.plantForm.getRawValue(), cycle_id: this.cycleId });
+    const { tag, quantity, ...rest } = this.plantForm.getRawValue();
+    const qty = quantity ?? 1;
+    if (qty <= 1) {
+      await this.electron.api.plants.create({ ...rest, tag, cycle_id: this.cycleId });
+    } else {
+      for (let i = 1; i <= qty; i++) {
+        await this.electron.api.plants.create({ ...rest, tag: `${tag} #${i}`, cycle_id: this.cycleId });
+      }
+    }
     this.plantForm.reset({
       tag: '',
       strain: '',
@@ -223,18 +300,34 @@ export class CycleDetailComponent implements OnInit {
       pot_liters: null,
       substrate: 'Super Solo Orgânico',
       planted_at: new Date().toISOString().slice(0, 10),
+      quantity: 1,
     });
     await this.reload();
   }
 
-  plantAge(plant: Plant) {
-    return computePlantAge(plant.planted_at);
+  growthPhase(plant: Plant): GrowthPhaseInfo | null {
+    return computeGrowthPhase(plant, this.flowerSettings());
   }
 
-  plantAgeLabel(plant: Plant): string {
-    const age = this.plantAge(plant);
-    if (!age) return 'Data de plantio não informada';
-    return `${age.days} dia(s) de vida · Semana ${age.week}`;
+  growthPhaseLabel(plant: Plant): string {
+    return growthPhaseLabel(this.growthPhase(plant));
+  }
+
+  canManualFlip(plant: Plant): boolean {
+    return plant.seed_type !== 'autoflorescente' && !plant.flip_date;
+  }
+
+  async flipToFlower(plant: Plant): Promise<void> {
+    if (this.flipForm.invalid) return;
+    const { flip_date } = this.flipForm.getRawValue();
+    await this.electron.api.plants.update(plant.id, { flip_date });
+    await this.reload();
+  }
+
+  async undoFlip(plant: Plant): Promise<void> {
+    if (!confirm('Desfazer o flip para floração desta planta?')) return;
+    await this.electron.api.plants.update(plant.id, { flip_date: null });
+    await this.reload();
   }
 
   async removePlant(id: string): Promise<void> {
@@ -253,6 +346,7 @@ export class CycleDetailComponent implements OnInit {
     this.trainingsByPlant.update((m) => ({ ...m, [plant.id]: trainings }));
     const waterings = await this.electron.api.waterings.listByPlant(plant.id);
     this.wateringsByPlant.update((m) => ({ ...m, [plant.id]: waterings }));
+    await this.loadPartsForWaterings(waterings);
     const transplants = await this.electron.api.plants.listTransplants(plant.id);
     this.transplantsByPlant.update((m) => ({ ...m, [plant.id]: transplants }));
   }
@@ -363,6 +457,89 @@ export class CycleDetailComponent implements OnInit {
 
   stockItemName(id: string): string {
     return this.stockItems().find((i) => i.id === id)?.name ?? 'Insumo removido';
+  }
+
+  setFeedingMethod(method: 'organico' | 'mineral'): void {
+    this.feedingMethod.set(method);
+  }
+
+  setBulkFeedingMethod(method: 'organico' | 'mineral'): void {
+    this.bulkFeedingMethod.set(method);
+  }
+
+  async onMineralProfileChange(profileId: string | null, bulk = false): Promise<void> {
+    const form = bulk ? this.bulkMineralWateringForm : this.mineralWateringForm;
+    const stagesSignal = bulk ? this.bulkMineralStages : this.mineralStages;
+    form.patchValue({ stage_id: null });
+    if (!profileId) {
+      stagesSignal.set([]);
+      return;
+    }
+    stagesSignal.set(await this.electron.api.feedingProfiles.listStagesWithParts(profileId));
+  }
+
+  mineralPreview(bulk = false): ComputedPartAmount[] {
+    const form = bulk ? this.bulkMineralWateringForm : this.mineralWateringForm;
+    const stagesSignal = bulk ? this.bulkMineralStages : this.mineralStages;
+    const { stage_id, volume_ml } = form.getRawValue();
+    if (!stage_id || !volume_ml) return [];
+    const stage = stagesSignal().find((s) => s.id === stage_id);
+    if (!stage) return [];
+    return computePartAmounts(stage.parts, volume_ml);
+  }
+
+  async addMineralWatering(plantId: string): Promise<void> {
+    if (this.mineralWateringForm.invalid) return;
+    const { profile_id, ...rest } = this.mineralWateringForm.getRawValue();
+    await this.electron.api.waterings.createMineralFeeding({
+      ...rest,
+      plant_id: plantId,
+      cycle_id: this.cycleId,
+    });
+    this.mineralWateringForm.reset({ date: new Date().toISOString().slice(0, 10), profile_id: null, stage_id: null, volume_ml: null, notes: '' });
+    this.mineralStages.set([]);
+    const waterings = await this.electron.api.waterings.listByPlant(plantId);
+    this.wateringsByPlant.update((m) => ({ ...m, [plantId]: waterings }));
+    await this.loadPartsForWaterings(waterings);
+    await this.reloadLastWaterings();
+    await this.reloadStockItems();
+  }
+
+  async addBulkMineralWatering(): Promise<void> {
+    if (this.bulkMineralWateringForm.invalid || this.selectedPlantIds().size === 0) return;
+    this.bulkBusy = true;
+    try {
+      const plantIds = Array.from(this.selectedPlantIds());
+      const { profile_id, ...rest } = this.bulkMineralWateringForm.getRawValue();
+      await this.electron.api.waterings.createMineralFeedingBulk(plantIds, { ...rest, cycle_id: this.cycleId });
+      this.bulkMineralWateringForm.reset({ date: new Date().toISOString().slice(0, 10), profile_id: null, stage_id: null, volume_ml: null, notes: '' });
+      this.bulkMineralStages.set([]);
+      this.selectedPlantIds.set(new Set());
+      this.bulkWateringMode.set(false);
+      await this.reloadLastWaterings();
+      await this.reloadStockItems();
+      if (this.expandedPlantId) {
+        const waterings = await this.electron.api.waterings.listByPlant(this.expandedPlantId);
+        this.wateringsByPlant.update((m) => ({ ...m, [this.expandedPlantId as string]: waterings }));
+        await this.loadPartsForWaterings(waterings);
+      }
+    } finally {
+      this.bulkBusy = false;
+    }
+  }
+
+  async loadPartsForWaterings(waterings: Watering[]): Promise<void> {
+    const mineralOnes = waterings.filter((w) => w.feeding_method === 'mineral');
+    if (mineralOnes.length === 0) return;
+    const entries = await Promise.all(
+      mineralOnes.map(async (w) => [w.id, await this.electron.api.waterings.getPartsForWatering(w.id)] as const),
+    );
+    this.partsByWateringId.update((m) => ({ ...m, ...Object.fromEntries(entries) }));
+  }
+
+  wateringPartsSummary(wateringId: string): string {
+    const parts = this.partsByWateringId()[wateringId] ?? [];
+    return parts.map((p) => `${p.part_label}: ${p.amount}${p.unit}`).join(' · ');
   }
 
   daysSinceLastWatering(plantId: string): number | null {

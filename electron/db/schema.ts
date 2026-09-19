@@ -40,6 +40,7 @@ CREATE TABLE IF NOT EXISTS plants (
   substrate TEXT,
   planted_at TEXT, -- data de plantio/germinação, usada para calcular dias de vida e semana
   is_final_pot INTEGER NOT NULL DEFAULT 0, -- 1 = planta ficará neste vaso, não sugerir mais transplantes
+  flip_date TEXT, -- data de início da floração (automático p/ autoflorescentes, manual p/ fotoperíodo)
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
   updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
@@ -135,6 +136,36 @@ CREATE TABLE IF NOT EXISTS journal_photos (
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
+-- Perfis de alimentação mineral/organomineral (ex: EasyCoco), com etapas e doses por litro,
+-- para padronizar regas minerais informando apenas o volume de água.
+CREATE TABLE IF NOT EXISTS feeding_profiles (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  substrate_type TEXT, -- ex: fibra_coco, organomineral
+  notes TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS feeding_profile_stages (
+  id TEXT PRIMARY KEY,
+  profile_id TEXT NOT NULL REFERENCES feeding_profiles(id) ON DELETE CASCADE,
+  stage_label TEXT NOT NULL, -- ex: "Vega", "Início de Flora"
+  cycle_stage_hint TEXT, -- germinacao|vegetativo|floracao_stretch|floracao_bulking|floracao_fade (opcional)
+  weeks_min REAL,
+  weeks_max REAL,
+  sort_order INTEGER NOT NULL DEFAULT 0
+);
+
+CREATE TABLE IF NOT EXISTS feeding_profile_parts (
+  id TEXT PRIMARY KEY,
+  stage_id TEXT NOT NULL REFERENCES feeding_profile_stages(id) ON DELETE CASCADE,
+  part_label TEXT NOT NULL, -- ex: "Parte A"
+  input_item_id TEXT REFERENCES input_items(id) ON DELETE SET NULL,
+  dose_per_liter REAL NOT NULL, -- ex: 0.5
+  dose_unit TEXT NOT NULL DEFAULT 'g' -- g|mL
+);
+
 CREATE TABLE IF NOT EXISTS waterings (
   id TEXT PRIMARY KEY,
   plant_id TEXT REFERENCES plants(id) ON DELETE CASCADE,
@@ -147,7 +178,20 @@ CREATE TABLE IF NOT EXISTS waterings (
   notes TEXT,
   input_item_id TEXT REFERENCES input_items(id) ON DELETE SET NULL, -- insumo do estoque usado nesta rega, se houver
   input_item_amount_ml REAL, -- quantidade (mL) descontada do estoque do insumo acima
+  feeding_method TEXT, -- organico|mineral
+  feeding_profile_stage_id TEXT REFERENCES feeding_profile_stages(id) ON DELETE SET NULL, -- etapa do perfil mineral usada, se houver
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+-- Registro (snapshot) das quantidades calculadas de cada parte para uma rega mineral específica,
+-- preservando o histórico mesmo que o perfil seja alterado depois.
+CREATE TABLE IF NOT EXISTS watering_parts (
+  id TEXT PRIMARY KEY,
+  watering_id TEXT NOT NULL REFERENCES waterings(id) ON DELETE CASCADE,
+  part_label TEXT NOT NULL,
+  input_item_id TEXT REFERENCES input_items(id) ON DELETE SET NULL,
+  amount REAL NOT NULL,
+  unit TEXT NOT NULL
 );
 
 CREATE INDEX IF NOT EXISTS idx_cycles_grow ON cycles(grow_id);
@@ -160,6 +204,9 @@ CREATE INDEX IF NOT EXISTS idx_journal_cycle ON journal_entries(cycle_id);
 CREATE INDEX IF NOT EXISTS idx_journal_photos_entry ON journal_photos(journal_entry_id);
 CREATE INDEX IF NOT EXISTS idx_waterings_plant ON waterings(plant_id);
 CREATE INDEX IF NOT EXISTS idx_waterings_cycle ON waterings(cycle_id);
+CREATE INDEX IF NOT EXISTS idx_feeding_stages_profile ON feeding_profile_stages(profile_id);
+CREATE INDEX IF NOT EXISTS idx_feeding_parts_stage ON feeding_profile_parts(stage_id);
+CREATE INDEX IF NOT EXISTS idx_watering_parts_watering ON watering_parts(watering_id);
 `;
 
 // Additive migrations for databases created before a schema change.
@@ -171,4 +218,43 @@ export const MIGRATIONS_SQL: string[] = [
   'ALTER TABLE plants ADD COLUMN is_final_pot INTEGER NOT NULL DEFAULT 0',
   'ALTER TABLE waterings ADD COLUMN input_item_id TEXT REFERENCES input_items(id) ON DELETE SET NULL',
   'ALTER TABLE waterings ADD COLUMN input_item_amount_ml REAL',
+  'ALTER TABLE plants ADD COLUMN flip_date TEXT',
+  `CREATE TABLE IF NOT EXISTS feeding_profiles (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    substrate_type TEXT,
+    notes TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+  )`,
+  `CREATE TABLE IF NOT EXISTS feeding_profile_stages (
+    id TEXT PRIMARY KEY,
+    profile_id TEXT NOT NULL REFERENCES feeding_profiles(id) ON DELETE CASCADE,
+    stage_label TEXT NOT NULL,
+    cycle_stage_hint TEXT,
+    weeks_min REAL,
+    weeks_max REAL,
+    sort_order INTEGER NOT NULL DEFAULT 0
+  )`,
+  `CREATE TABLE IF NOT EXISTS feeding_profile_parts (
+    id TEXT PRIMARY KEY,
+    stage_id TEXT NOT NULL REFERENCES feeding_profile_stages(id) ON DELETE CASCADE,
+    part_label TEXT NOT NULL,
+    input_item_id TEXT REFERENCES input_items(id) ON DELETE SET NULL,
+    dose_per_liter REAL NOT NULL,
+    dose_unit TEXT NOT NULL DEFAULT 'g'
+  )`,
+  `CREATE TABLE IF NOT EXISTS watering_parts (
+    id TEXT PRIMARY KEY,
+    watering_id TEXT NOT NULL REFERENCES waterings(id) ON DELETE CASCADE,
+    part_label TEXT NOT NULL,
+    input_item_id TEXT REFERENCES input_items(id) ON DELETE SET NULL,
+    amount REAL NOT NULL,
+    unit TEXT NOT NULL
+  )`,
+  'ALTER TABLE waterings ADD COLUMN feeding_method TEXT',
+  'ALTER TABLE waterings ADD COLUMN feeding_profile_stage_id TEXT REFERENCES feeding_profile_stages(id) ON DELETE SET NULL',
+  'CREATE INDEX IF NOT EXISTS idx_feeding_stages_profile ON feeding_profile_stages(profile_id)',
+  'CREATE INDEX IF NOT EXISTS idx_feeding_parts_stage ON feeding_profile_parts(stage_id)',
+  'CREATE INDEX IF NOT EXISTS idx_watering_parts_watering ON watering_parts(watering_id)',
 ];

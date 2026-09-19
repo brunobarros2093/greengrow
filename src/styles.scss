@@ -110,6 +110,59 @@ mat-card.form-panel {
   margin-bottom: 16px;
 }
 
+.feeding-profiles-layout {
+  display: grid;
+  grid-template-columns: 320px 1fr;
+  gap: 24px;
+  align-items: start;
+}
+
+@media (max-width: 900px) {
+  .feeding-profiles-layout {
+    grid-template-columns: 1fr;
+  }
+}
+
+.feeding-profiles-list,
+.feeding-profiles-detail {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.full-width-btn {
+  width: 100%;
+}
+
+.profile-card,
+.stage-card {
+  cursor: pointer;
+}
+
+.stage-card {
+  cursor: default;
+}
+
+.profile-card mat-card-content {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.profile-card.selected {
+  outline: 2px solid var(--mat-sys-primary);
+}
+
+.parts-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.parts-table td {
+  padding: 4px 8px;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+}
+
 .tab-body h2,
 .app-content h2 {
   margin-top: 0;
@@ -122,6 +175,26 @@ mat-card.form-panel {
 
 .full-width {
   grid-column: 1 / -1;
+}
+
+.feeding-method-toggle {
+  margin: 8px 0 16px;
+}
+
+.mineral-preview {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 12px;
+  border-radius: 6px;
+  background: rgba(21, 101, 192, 0.08);
+  color: #1565c0;
+  font-size: 0.9rem;
+}
+
+.mineral-preview-part {
+  font-weight: 600;
 }
 
 .training-list {
@@ -292,6 +365,23 @@ mat-card.form-panel {
 
 .final-pot-toggle {
   margin: 8px 0;
+}
+
+.watering-badge.status-flower {
+  background: rgba(216, 27, 96, 0.12);
+  color: #ad1457;
+}
+
+.flip-hint {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  margin: 8px 0;
+  border-radius: 6px;
+  background: rgba(216, 27, 96, 0.08);
+  color: #ad1457;
+  font-size: 0.9rem;
 }
 
 .alerts-panel {

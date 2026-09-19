@@ -45,6 +45,7 @@ export interface Plant {
   substrate: string | null;
   planted_at: string | null;
   is_final_pot: number;
+  flip_date: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -61,6 +62,97 @@ export function computePlantAge(plantedAt: string | null | undefined): PlantAgeI
   const days = Math.max(0, Math.floor(diffMs / 86400000));
   const week = Math.floor(days / 7) + 1;
   return { days, week };
+}
+
+export interface FlowerSettings {
+  auto_flower_veg_days: number;
+}
+
+export const DEFAULT_FLOWER_SETTINGS: FlowerSettings = {
+  auto_flower_veg_days: 30,
+};
+
+export interface GrowthPhaseInfo {
+  phase: 'vegetativo' | 'floracao';
+  vegDays: number;
+  vegWeek: number;
+  flowerDays: number | null;
+  flowerWeek: number | null;
+  flipDate: string | null;
+  /** true para autoflorescentes: o flip é automático (baseado em dias), não manual. */
+  isAutoFlip: boolean;
+  /** Dias restantes até o flip automático (autoflorescentes ainda em vegetativo). */
+  autoFlipDueInDays: number | null;
+}
+
+function daysBetweenDateStrs(fromDateStr: string, toDateStr: string): number {
+  const from = new Date(fromDateStr + 'T00:00:00').getTime();
+  const to = new Date(toDateStr + 'T00:00:00').getTime();
+  return Math.max(0, Math.floor((to - from) / 86400000));
+}
+
+/**
+ * Calcula em qual fase de desenvolvimento a planta está (vegetativo ou floração),
+ * quantos dias/semanas em cada uma, e — para autoflorescentes — quantos dias faltam
+ * para o flip automático (padrão: 30 dias de vegetativo, configurável em Configurações).
+ */
+export function computeGrowthPhase(
+  plant: Pick<Plant, 'planted_at' | 'seed_type' | 'flip_date'>,
+  settings: FlowerSettings = DEFAULT_FLOWER_SETTINGS,
+): GrowthPhaseInfo | null {
+  if (!plant.planted_at) return null;
+  const today = new Date().toISOString().slice(0, 10);
+  const isAuto = plant.seed_type === 'autoflorescente';
+  const totalDays = computePlantAge(plant.planted_at)!.days;
+
+  let effectiveFlipDate = plant.flip_date;
+  if (!effectiveFlipDate && isAuto) {
+    const candidate = new Date(plant.planted_at + 'T00:00:00');
+    candidate.setDate(candidate.getDate() + settings.auto_flower_veg_days);
+    const candidateStr = candidate.toISOString().slice(0, 10);
+    if (candidateStr <= today) effectiveFlipDate = candidateStr;
+  }
+
+  if (!effectiveFlipDate) {
+    const autoFlipDueInDays = isAuto ? settings.auto_flower_veg_days - totalDays : null;
+    return {
+      phase: 'vegetativo',
+      vegDays: totalDays,
+      vegWeek: Math.floor(totalDays / 7) + 1,
+      flowerDays: null,
+      flowerWeek: null,
+      flipDate: null,
+      isAutoFlip: isAuto,
+      autoFlipDueInDays,
+    };
+  }
+
+  const vegDays = daysBetweenDateStrs(plant.planted_at, effectiveFlipDate);
+  const flowerDays = daysBetweenDateStrs(effectiveFlipDate, today);
+  return {
+    phase: 'floracao',
+    vegDays,
+    vegWeek: Math.floor(vegDays / 7) + 1,
+    flowerDays,
+    flowerWeek: Math.floor(flowerDays / 7) + 1,
+    flipDate: effectiveFlipDate,
+    isAutoFlip: isAuto,
+    autoFlipDueInDays: null,
+  };
+}
+
+export function growthPhaseLabel(info: GrowthPhaseInfo | null): string {
+  if (!info) return 'Data de plantio não informada';
+  if (info.phase === 'floracao') {
+    return `Floração: ${info.flowerDays} dia(s) · Semana ${info.flowerWeek} (Veg: ${info.vegDays}d)`;
+  }
+  if (info.isAutoFlip && info.autoFlipDueInDays !== null) {
+    if (info.autoFlipDueInDays <= 0) {
+      return `Vegetativo: ${info.vegDays} dia(s) · Semana ${info.vegWeek} (flip automático hoje)`;
+    }
+    return `Vegetativo: ${info.vegDays} dia(s) · Semana ${info.vegWeek} (flip automático em ~${info.autoFlipDueInDays}d)`;
+  }
+  return `Vegetativo: ${info.vegDays} dia(s) · Semana ${info.vegWeek}`;
 }
 
 export interface PlantWithContext extends Plant {
@@ -329,7 +421,81 @@ export interface Watering {
   notes: string | null;
   input_item_id: string | null;
   input_item_amount_ml: number | null;
+  feeding_method: string | null;
+  feeding_profile_stage_id: string | null;
   created_at: string;
+}
+
+export interface WateringPart {
+  id: string;
+  watering_id: string;
+  part_label: string;
+  input_item_id: string | null;
+  amount: number;
+  unit: string;
+}
+
+/**
+ * Perfis de alimentação mineral/organomineral (ex: EasyCoco): padronizam as doses de cada
+ * "parte" (A/B/C etc.) por litro de água, por etapa do cultivo, para que registrar uma rega
+ * mineral exija apenas informar o volume de água.
+ */
+export interface FeedingProfile {
+  id: string;
+  name: string;
+  substrate_type: string | null;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface FeedingProfileStage {
+  id: string;
+  profile_id: string;
+  stage_label: string;
+  cycle_stage_hint: string | null;
+  weeks_min: number | null;
+  weeks_max: number | null;
+  sort_order: number;
+}
+
+export interface FeedingProfilePart {
+  id: string;
+  stage_id: string;
+  part_label: string;
+  input_item_id: string | null;
+  dose_per_liter: number;
+  dose_unit: string;
+}
+
+export interface FeedingProfileStageWithParts extends FeedingProfileStage {
+  parts: FeedingProfilePart[];
+}
+
+export const DOSE_UNITS = ['g', 'mL'];
+
+export function formatStageWeeks(stage: Pick<FeedingProfileStage, 'weeks_min' | 'weeks_max'>): string {
+  if (stage.weeks_min == null) return '—';
+  if (stage.weeks_max == null || stage.weeks_max === stage.weeks_min) return `${stage.weeks_min} semana(s)`;
+  return `${stage.weeks_min}-${stage.weeks_max} semanas`;
+}
+
+export interface ComputedPartAmount {
+  part_label: string;
+  input_item_id: string | null;
+  amount: number;
+  unit: string;
+}
+
+/** Calcula, a partir do volume de água (mL), quanto de cada parte do perfil deve ser adicionado. */
+export function computePartAmounts(parts: FeedingProfilePart[], volumeMl: number): ComputedPartAmount[] {
+  const volumeLiters = volumeMl / 1000;
+  return parts.map((p) => ({
+    part_label: p.part_label,
+    input_item_id: p.input_item_id,
+    amount: Math.round(p.dose_per_liter * volumeLiters * 100) / 100,
+    unit: p.dose_unit,
+  }));
 }
 
 export const WATERING_TYPES = [

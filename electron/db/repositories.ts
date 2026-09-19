@@ -18,6 +18,14 @@ const DEFAULT_POT_SIZES: PotSizes = {
   final_liters: 12,
 };
 
+export interface FlowerSettings {
+  auto_flower_veg_days: number;
+}
+
+const DEFAULT_FLOWER_SETTINGS: FlowerSettings = {
+  auto_flower_veg_days: 30,
+};
+
 export const SettingsRepo = {
   get(key: string): string | null {
     const row = getDb().prepare('SELECT value FROM app_settings WHERE key = ?').get(key) as { value: string } | undefined;
@@ -40,6 +48,15 @@ export const SettingsRepo = {
     this.set('pot_size.intermediate_liters', String(sizes.intermediate_liters));
     this.set('pot_size.final_liters', String(sizes.final_liters));
     return this.getPotSizes();
+  },
+  getFlowerSettings(): FlowerSettings {
+    return {
+      auto_flower_veg_days: Number(this.get('flower.auto_flower_veg_days')) || DEFAULT_FLOWER_SETTINGS.auto_flower_veg_days,
+    };
+  },
+  setFlowerSettings(settings: FlowerSettings): FlowerSettings {
+    this.set('flower.auto_flower_veg_days', String(settings.auto_flower_veg_days));
+    return this.getFlowerSettings();
   },
 };
 
@@ -151,6 +168,7 @@ export interface Plant {
   substrate: string | null;
   planted_at: string | null;
   is_final_pot: number;
+  flip_date: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -197,13 +215,18 @@ export const PlantsRepo = {
   get(id: string): Plant | undefined {
     return getDb().prepare('SELECT * FROM plants WHERE id = ?').get(id) as unknown as Plant | undefined;
   },
-  create(input: Omit<Plant, 'id' | 'created_at' | 'updated_at' | 'is_final_pot'> & { is_final_pot?: number }): Plant {
+  create(
+    input: Omit<Plant, 'id' | 'created_at' | 'updated_at' | 'is_final_pot' | 'flip_date'> & {
+      is_final_pot?: number;
+      flip_date?: string | null;
+    }
+  ): Plant {
     const id = randomUUID();
     const ts = now();
     getDb()
       .prepare(
-        `INSERT INTO plants (id, cycle_id, tag, strain, seed_type, pot_liters, substrate, planted_at, is_final_pot, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        `INSERT INTO plants (id, cycle_id, tag, strain, seed_type, pot_liters, substrate, planted_at, is_final_pot, flip_date, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
       )
       .run(
         id,
@@ -215,6 +238,7 @@ export const PlantsRepo = {
         input.substrate,
         input.planted_at,
         input.is_final_pot ?? 0,
+        input.flip_date ?? null,
         ts,
         ts
       );
@@ -226,7 +250,7 @@ export const PlantsRepo = {
     const merged = { ...current, ...input };
     getDb()
       .prepare(
-        `UPDATE plants SET cycle_id=?, tag=?, strain=?, seed_type=?, pot_liters=?, substrate=?, planted_at=?, is_final_pot=?, updated_at=? WHERE id=?`
+        `UPDATE plants SET cycle_id=?, tag=?, strain=?, seed_type=?, pot_liters=?, substrate=?, planted_at=?, is_final_pot=?, flip_date=?, updated_at=? WHERE id=?`
       )
       .run(
         merged.cycle_id,
@@ -237,6 +261,7 @@ export const PlantsRepo = {
         merged.substrate,
         merged.planted_at,
         merged.is_final_pot,
+        merged.flip_date,
         now(),
         id
       );
@@ -386,6 +411,15 @@ export const InputItemsRepo = {
     const delta = current.unit === 'L' ? deltaMl / 1000 : deltaMl;
     return this.adjustQuantity(id, delta);
   },
+  /** Aplica um delta informado em `unit` (g ou mL, das doses de perfis de alimentação), convertendo para a unidade de estoque do item. */
+  adjustQuantityByDose(id: string, deltaAmount: number, doseUnit: string): InputItem {
+    const current = this.get(id);
+    if (!current) throw new Error('Input item not found');
+    let delta = deltaAmount;
+    if (doseUnit === 'g' && current.unit === 'kg') delta = deltaAmount / 1000;
+    else if (doseUnit === 'mL' && current.unit === 'L') delta = deltaAmount / 1000;
+    return this.adjustQuantity(id, delta);
+  },
   remove(id: string): void {
     getDb().prepare('DELETE FROM input_items WHERE id = ?').run(id);
   },
@@ -456,6 +490,144 @@ export const SuperSoloRepo = {
   },
 };
 
+// ---------- Feeding Profiles (perfis de alimentação mineral/organomineral) ----------
+export interface FeedingProfile {
+  id: string;
+  name: string;
+  substrate_type: string | null;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface FeedingProfileStage {
+  id: string;
+  profile_id: string;
+  stage_label: string;
+  cycle_stage_hint: string | null;
+  weeks_min: number | null;
+  weeks_max: number | null;
+  sort_order: number;
+}
+
+export interface FeedingProfilePart {
+  id: string;
+  stage_id: string;
+  part_label: string;
+  input_item_id: string | null;
+  dose_per_liter: number;
+  dose_unit: string;
+}
+
+export interface FeedingProfileStageWithParts extends FeedingProfileStage {
+  parts: FeedingProfilePart[];
+}
+
+export const FeedingProfilesRepo = {
+  list(): FeedingProfile[] {
+    return getDb().prepare('SELECT * FROM feeding_profiles ORDER BY name ASC').all() as unknown as FeedingProfile[];
+  },
+  get(id: string): FeedingProfile | undefined {
+    return getDb().prepare('SELECT * FROM feeding_profiles WHERE id = ?').get(id) as unknown as FeedingProfile | undefined;
+  },
+  create(input: Omit<FeedingProfile, 'id' | 'created_at' | 'updated_at'>): FeedingProfile {
+    const id = randomUUID();
+    const ts = now();
+    getDb()
+      .prepare(
+        `INSERT INTO feeding_profiles (id, name, substrate_type, notes, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)`
+      )
+      .run(id, input.name, input.substrate_type, input.notes, ts, ts);
+    return this.get(id)!;
+  },
+  update(id: string, input: Partial<Omit<FeedingProfile, 'id' | 'created_at' | 'updated_at'>>): FeedingProfile {
+    const current = this.get(id);
+    if (!current) throw new Error('Feeding profile not found');
+    const merged = { ...current, ...input };
+    getDb()
+      .prepare(`UPDATE feeding_profiles SET name=?, substrate_type=?, notes=?, updated_at=? WHERE id=?`)
+      .run(merged.name, merged.substrate_type, merged.notes, now(), id);
+    return this.get(id)!;
+  },
+  remove(id: string): void {
+    getDb().prepare('DELETE FROM feeding_profiles WHERE id = ?').run(id);
+  },
+  listStagesWithParts(profileId: string): FeedingProfileStageWithParts[] {
+    const db = getDb();
+    const stages = db
+      .prepare('SELECT * FROM feeding_profile_stages WHERE profile_id = ? ORDER BY sort_order ASC')
+      .all(profileId) as unknown as FeedingProfileStage[];
+    return stages.map((stage) => ({
+      ...stage,
+      parts: db.prepare('SELECT * FROM feeding_profile_parts WHERE stage_id = ?').all(stage.id) as unknown as FeedingProfilePart[],
+    }));
+  },
+  addStage(input: Omit<FeedingProfileStage, 'id'>): FeedingProfileStage {
+    const id = randomUUID();
+    getDb()
+      .prepare(
+        `INSERT INTO feeding_profile_stages (id, profile_id, stage_label, cycle_stage_hint, weeks_min, weeks_max, sort_order)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`
+      )
+      .run(id, input.profile_id, input.stage_label, input.cycle_stage_hint, input.weeks_min, input.weeks_max, input.sort_order);
+    return getDb().prepare('SELECT * FROM feeding_profile_stages WHERE id = ?').get(id) as unknown as FeedingProfileStage;
+  },
+  removeStage(id: string): void {
+    getDb().prepare('DELETE FROM feeding_profile_stages WHERE id = ?').run(id);
+  },
+  addPart(input: Omit<FeedingProfilePart, 'id'>): FeedingProfilePart {
+    const id = randomUUID();
+    getDb()
+      .prepare(
+        `INSERT INTO feeding_profile_parts (id, stage_id, part_label, input_item_id, dose_per_liter, dose_unit)
+         VALUES (?, ?, ?, ?, ?, ?)`
+      )
+      .run(id, input.stage_id, input.part_label, input.input_item_id, input.dose_per_liter, input.dose_unit);
+    return getDb().prepare('SELECT * FROM feeding_profile_parts WHERE id = ?').get(id) as unknown as FeedingProfilePart;
+  },
+  removePart(id: string): void {
+    getDb().prepare('DELETE FROM feeding_profile_parts WHERE id = ?').run(id);
+  },
+  /** Cria (se ainda não existir) o perfil padrão EasyCoco com a tabela de alimentação fotoperíodo de referência. */
+  seedEasyCocoDefault(): FeedingProfile {
+    const existing = getDb().prepare("SELECT * FROM feeding_profiles WHERE name = 'EasyCoco'").get() as
+      | FeedingProfile
+      | undefined;
+    if (existing) return existing;
+
+    const profile = this.create({
+      name: 'EasyCoco',
+      substrate_type: 'fibra_coco',
+      notes: 'Tabela de alimentação fotoperíodo (g/L). Doses de referência do fabricante.',
+    });
+
+    const stagesData: { stage_label: string; cycle_stage_hint: string | null; weeks_min: number; weeks_max: number; doses: [number, number, number] }[] = [
+      { stage_label: 'Brotos Recém Germinados', cycle_stage_hint: 'germinacao', weeks_min: 1, weeks_max: 2, doses: [0.5, 0.5, 0.1] },
+      { stage_label: 'Vega', cycle_stage_hint: 'vegetativo', weeks_min: 4, weeks_max: 8, doses: [1.0, 1.0, 0.2] },
+      { stage_label: 'Início de Flora', cycle_stage_hint: 'floracao_stretch', weeks_min: 2, weeks_max: 2, doses: [1.25, 1.25, 0.25] },
+      { stage_label: 'Meio de Flora', cycle_stage_hint: 'floracao_bulking', weeks_min: 3, weeks_max: 4, doses: [1.0, 1.0, 0.5] },
+      { stage_label: 'Final de Flora', cycle_stage_hint: 'floracao_fade', weeks_min: 2, weeks_max: 2, doses: [0.5, 0.5, 0.5] },
+      { stage_label: 'Última Semana', cycle_stage_hint: 'floracao_fade', weeks_min: 1, weeks_max: 1, doses: [0, 0, 0] },
+    ];
+
+    stagesData.forEach((s, index) => {
+      const stage = this.addStage({
+        profile_id: profile.id,
+        stage_label: s.stage_label,
+        cycle_stage_hint: s.cycle_stage_hint,
+        weeks_min: s.weeks_min,
+        weeks_max: s.weeks_max,
+        sort_order: index,
+      });
+      (['Parte A', 'Parte B', 'Parte C'] as const).forEach((label, partIdx) => {
+        this.addPart({ stage_id: stage.id, part_label: label, input_item_id: null, dose_per_liter: s.doses[partIdx], dose_unit: 'g' });
+      });
+    });
+
+    return profile;
+  },
+};
+
 // ---------- Waterings / Fertirrigação ----------
 export interface Watering {
   id: string;
@@ -469,7 +641,18 @@ export interface Watering {
   notes: string | null;
   input_item_id: string | null;
   input_item_amount_ml: number | null;
+  feeding_method: string | null;
+  feeding_profile_stage_id: string | null;
   created_at: string;
+}
+
+export interface WateringPart {
+  id: string;
+  watering_id: string;
+  part_label: string;
+  input_item_id: string | null;
+  amount: number;
+  unit: string;
 }
 
 export const WateringsRepo = {
@@ -508,13 +691,13 @@ export const WateringsRepo = {
       .get(cycleId) as { date: string; input_type: string } | undefined;
     return row ?? null;
   },
-  create(input: Omit<Watering, 'id' | 'created_at'>): Watering {
+  create(input: Omit<Watering, 'id' | 'created_at' | 'feeding_method' | 'feeding_profile_stage_id'>): Watering {
     const id = randomUUID();
     const ts = now();
     getDb()
       .prepare(
-        `INSERT INTO waterings (id, plant_id, cycle_id, date, type, input_type, nutrients_used, volume_ml, notes, input_item_id, input_item_amount_ml, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        `INSERT INTO waterings (id, plant_id, cycle_id, date, type, input_type, nutrients_used, volume_ml, notes, input_item_id, input_item_amount_ml, feeding_method, feeding_profile_stage_id, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
       )
       .run(
         id,
@@ -528,6 +711,8 @@ export const WateringsRepo = {
         input.notes,
         input.input_item_id ?? null,
         input.input_item_amount_ml ?? null,
+        'organico',
+        null,
         ts
       );
     if (input.input_item_id && input.input_item_amount_ml) {
@@ -535,11 +720,14 @@ export const WateringsRepo = {
     }
     return getDb().prepare('SELECT * FROM waterings WHERE id = ?').get(id) as unknown as Watering;
   },
-  createBulk(plantIds: string[], shared: Omit<Watering, 'id' | 'created_at' | 'plant_id'>): Watering[] {
+  createBulk(
+    plantIds: string[],
+    shared: Omit<Watering, 'id' | 'created_at' | 'plant_id' | 'feeding_method' | 'feeding_profile_stage_id'>
+  ): Watering[] {
     const db = getDb();
     const stmt = db.prepare(
-      `INSERT INTO waterings (id, plant_id, cycle_id, date, type, input_type, nutrients_used, volume_ml, notes, input_item_id, input_item_amount_ml, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      `INSERT INTO waterings (id, plant_id, cycle_id, date, type, input_type, nutrients_used, volume_ml, notes, input_item_id, input_item_amount_ml, feeding_method, feeding_profile_stage_id, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     );
     const ts = now();
     const ids: string[] = [];
@@ -560,6 +748,8 @@ export const WateringsRepo = {
           shared.notes,
           shared.input_item_id ?? null,
           shared.input_item_amount_ml ?? null,
+          'organico',
+          null,
           ts
         );
       }
@@ -580,7 +770,101 @@ export const WateringsRepo = {
     if (watering?.input_item_id && watering.input_item_amount_ml) {
       InputItemsRepo.adjustQuantityByMl(watering.input_item_id, watering.input_item_amount_ml);
     }
+    if (watering) {
+      const parts = db.prepare('SELECT * FROM watering_parts WHERE watering_id = ?').all(id) as unknown as WateringPart[];
+      for (const part of parts) {
+        if (part.input_item_id) InputItemsRepo.adjustQuantityByDose(part.input_item_id, part.amount, part.unit);
+      }
+    }
     db.prepare('DELETE FROM waterings WHERE id = ?').run(id);
+  },
+  getPartsForWatering(wateringId: string): WateringPart[] {
+    return getDb().prepare('SELECT * FROM watering_parts WHERE watering_id = ?').all(wateringId) as unknown as WateringPart[];
+  },
+  /** Rega mineral padronizada: calcula as doses de cada parte do perfil a partir do volume informado. */
+  createMineralFeeding(input: {
+    plant_id: string;
+    cycle_id: string | null;
+    date: string;
+    volume_ml: number;
+    feeding_profile_stage_id: string;
+    notes: string | null;
+  }): { watering: Watering; parts: WateringPart[] } {
+    const db = getDb();
+    const stageParts = db
+      .prepare('SELECT * FROM feeding_profile_parts WHERE stage_id = ?')
+      .all(input.feeding_profile_stage_id) as unknown as FeedingProfilePart[];
+    const id = randomUUID();
+    const ts = now();
+    const volumeLiters = input.volume_ml / 1000;
+    db.exec('BEGIN');
+    try {
+      db.prepare(
+        `INSERT INTO waterings (id, plant_id, cycle_id, date, type, input_type, nutrients_used, volume_ml, notes, input_item_id, input_item_amount_ml, feeding_method, feeding_profile_stage_id, created_at)
+         VALUES (?, ?, ?, ?, 'fertirrigacao', NULL, NULL, ?, ?, NULL, NULL, 'mineral', ?, ?)`
+      ).run(id, input.plant_id, input.cycle_id, input.date, input.volume_ml, input.notes, input.feeding_profile_stage_id, ts);
+      for (const part of stageParts) {
+        const amount = Math.round(part.dose_per_liter * volumeLiters * 100) / 100;
+        db.prepare(
+          `INSERT INTO watering_parts (id, watering_id, part_label, input_item_id, amount, unit) VALUES (?, ?, ?, ?, ?, ?)`
+        ).run(randomUUID(), id, part.part_label, part.input_item_id, amount, part.dose_unit);
+        if (part.input_item_id) InputItemsRepo.adjustQuantityByDose(part.input_item_id, -amount, part.dose_unit);
+      }
+      db.exec('COMMIT');
+    } catch (err) {
+      db.exec('ROLLBACK');
+      throw err;
+    }
+    return {
+      watering: db.prepare('SELECT * FROM waterings WHERE id = ?').get(id) as unknown as Watering,
+      parts: this.getPartsForWatering(id),
+    };
+  },
+  createMineralFeedingBulk(
+    plantIds: string[],
+    shared: { cycle_id: string | null; date: string; volume_ml: number; feeding_profile_stage_id: string; notes: string | null }
+  ): { waterings: Watering[]; partsByWatering: Record<string, WateringPart[]> } {
+    const db = getDb();
+    const stageParts = db
+      .prepare('SELECT * FROM feeding_profile_parts WHERE stage_id = ?')
+      .all(shared.feeding_profile_stage_id) as unknown as FeedingProfilePart[];
+    const volumeLiters = shared.volume_ml / 1000;
+    const ts = now();
+    const ids: string[] = [];
+    const partsByWatering: Record<string, WateringPart[]> = {};
+    db.exec('BEGIN');
+    try {
+      for (const plantId of plantIds) {
+        const id = randomUUID();
+        ids.push(id);
+        db.prepare(
+          `INSERT INTO waterings (id, plant_id, cycle_id, date, type, input_type, nutrients_used, volume_ml, notes, input_item_id, input_item_amount_ml, feeding_method, feeding_profile_stage_id, created_at)
+           VALUES (?, ?, ?, ?, 'fertirrigacao', NULL, NULL, ?, ?, NULL, NULL, 'mineral', ?, ?)`
+        ).run(id, plantId, shared.cycle_id, shared.date, shared.volume_ml, shared.notes, shared.feeding_profile_stage_id, ts);
+        partsByWatering[id] = [];
+        for (const part of stageParts) {
+          const amount = Math.round(part.dose_per_liter * volumeLiters * 100) / 100;
+          const partId = randomUUID();
+          db.prepare(
+            `INSERT INTO watering_parts (id, watering_id, part_label, input_item_id, amount, unit) VALUES (?, ?, ?, ?, ?, ?)`
+          ).run(partId, id, part.part_label, part.input_item_id, amount, part.dose_unit);
+          partsByWatering[id].push({ id: partId, watering_id: id, part_label: part.part_label, input_item_id: part.input_item_id, amount, unit: part.dose_unit });
+        }
+      }
+      for (const part of stageParts) {
+        if (part.input_item_id) {
+          const amount = Math.round(part.dose_per_liter * volumeLiters * 100) / 100;
+          InputItemsRepo.adjustQuantityByDose(part.input_item_id, -amount * plantIds.length, part.dose_unit);
+        }
+      }
+      db.exec('COMMIT');
+    } catch (err) {
+      db.exec('ROLLBACK');
+      throw err;
+    }
+    const placeholders = ids.map(() => '?').join(',');
+    const waterings = db.prepare(`SELECT * FROM waterings WHERE id IN (${placeholders})`).all(...ids) as unknown as Watering[];
+    return { waterings, partsByWatering };
   },
 };
 
