@@ -490,9 +490,11 @@ export class CycleDetailComponent implements OnInit {
 
   async addMineralWatering(plantId: string): Promise<void> {
     if (this.mineralWateringForm.invalid) return;
-    const { profile_id, ...rest } = this.mineralWateringForm.getRawValue();
+    const { profile_id, stage_id, ...rest } = this.mineralWateringForm.getRawValue();
     await this.electron.api.waterings.createMineralFeeding({
       ...rest,
+      feeding_profile_stage_id: stage_id,
+      notes: rest.notes || null,
       plant_id: plantId,
       cycle_id: this.cycleId,
     });
@@ -510,8 +512,13 @@ export class CycleDetailComponent implements OnInit {
     this.bulkBusy = true;
     try {
       const plantIds = Array.from(this.selectedPlantIds());
-      const { profile_id, ...rest } = this.bulkMineralWateringForm.getRawValue();
-      await this.electron.api.waterings.createMineralFeedingBulk(plantIds, { ...rest, cycle_id: this.cycleId });
+      const { profile_id, stage_id, ...rest } = this.bulkMineralWateringForm.getRawValue();
+      await this.electron.api.waterings.createMineralFeedingBulk(plantIds, {
+        ...rest,
+        feeding_profile_stage_id: stage_id,
+        notes: rest.notes || null,
+        cycle_id: this.cycleId,
+      });
       this.bulkMineralWateringForm.reset({ date: new Date().toISOString().slice(0, 10), profile_id: null, stage_id: null, volume_ml: null, notes: '' });
       this.bulkMineralStages.set([]);
       this.selectedPlantIds.set(new Set());
